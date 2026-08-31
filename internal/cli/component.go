@@ -167,14 +167,49 @@ func runComponentOwners(env Env, args []string) error {
 	owner, found := set.OwnerOf(target)
 	if !found {
 		// Reported rather than defaulted: a path outside every declared surface
-		// is exactly what a scope check needs to see.
-		return env.WriteJSON(map[string]any{"path": target, "owner": nil, "declared": set.IDs()})
+		// is exactly what a scope check needs to see. And no specs: they are
+		// found through the owner, and there is no owner.
+		return env.WriteJSON(map[string]any{
+			"path": target, "owner": nil, "declared": set.IDs(), "specs": []string{},
+		})
+	}
+
+	// Both halves of "what governs this file". A decision is closed inside one
+	// surface, so it resolves from the path; a capability crosses surfaces and
+	// names them instead, which is why it needs looking up from the other end.
+	// Without this the behaviour half had to be found by reading every spec.
+	specs, err := specsNaming(env.Repo, owner)
+	if err != nil {
+		return err
 	}
 	return env.WriteJSON(map[string]any{
 		"path":  target,
 		"owner": owner,
 		"map":   store.Coordinate{Kind: store.Decisions, Segments: []string{owner}}.String(),
+		"specs": specs,
 	})
+}
+
+// specsNaming lists the capability specs that declare a surface.
+func specsNaming(repo, id string) ([]string, error) {
+	files, _, err := store.Walk(repo, store.Coordinate{Kind: store.Specs})
+	if err != nil {
+		return nil, err
+	}
+	found := []string{}
+	for _, file := range files {
+		if file.IsIndex {
+			continue
+		}
+		record, _ := store.ReadRecord(filepath.Join(repo, store.Root, filepath.FromSlash(file.Path)), store.Specs)
+		for _, component := range record.Components {
+			if strings.EqualFold(component, id) {
+				found = append(found, file.Path)
+				break
+			}
+		}
+	}
+	return found, nil
 }
 
 // writeIndex creates a level's directory and its index, refusing to overwrite
