@@ -4,5 +4,7 @@
 # goreleaser's output.
 /dist/
 
-# A store this repository might grow for its own records.
-.openrecord/
+# A store this repository grows for its own records — anchored to the root, so
+# the fixture project under e2e/ carries its store into version control like any
+# real project does.
+/.openrecord/
