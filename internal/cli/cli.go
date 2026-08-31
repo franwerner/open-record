@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -19,8 +20,19 @@ type Command struct {
 	Summary string
 	// Usage is the one-line invocation shown by --help.
 	Usage string
+	// Flags registers what this command accepts, so help can list it. It is the
+	// same function the command runs through, never a second description of it:
+	// a hand-written flag list drifts, and the flag it stops mentioning is the
+	// one nobody can find.
+	Flags func(*flag.FlagSet)
 	Sub   []*Command
 	Run   func(env Env, args []string) error
+}
+
+// describes adapts a command's flag constructor to what help needs — register
+// into a throwaway set, keep nothing.
+func describes[T any](register func(*flag.FlagSet) T) func(*flag.FlagSet) {
+	return func(flags *flag.FlagSet) { register(flags) }
 }
 
 const (
@@ -182,5 +194,35 @@ func writeCommandHelp(out io.Writer, command *Command) {
 		fmt.Fprintln(out)
 		fmt.Fprintln(out, "Subcommands:")
 		writeCommandList(out, command.Sub, "  ")
+	}
+	writeFlagList(out, command)
+}
+
+// writeFlagList prints what the command accepts, read off the parser it actually
+// uses. A flag that exists is a flag that is documented, with no third place to
+// keep in step.
+func writeFlagList(out io.Writer, command *Command) {
+	if command.Flags == nil {
+		return
+	}
+	flags := flagSet(command.Name)
+	command.Flags(flags)
+
+	type entry struct{ name, usage string }
+	var entries []entry
+	width := 0
+	flags.VisitAll(func(item *flag.Flag) {
+		entries = append(entries, entry{name: "--" + item.Name, usage: item.Usage})
+		if len(item.Name)+2 > width {
+			width = len(item.Name) + 2
+		}
+	})
+	if len(entries) == 0 {
+		return
+	}
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Flags:")
+	for _, item := range entries {
+		fmt.Fprintf(out, "  %-*s  %s\n", width, item.name, item.usage)
 	}
 }

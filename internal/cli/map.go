@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"github.com/franwerner/openrecord/internal/finding"
 	"github.com/franwerner/openrecord/internal/store"
 )
@@ -11,9 +12,15 @@ type mapReport struct {
 	Notes   []finding.Finding `json:"notes,omitempty"`
 }
 
+// coordinateFlag is the one flag map, validate and grep share. One definition,
+// so the three cannot describe the same thing differently.
+func coordinateFlag(flags *flag.FlagSet) *string {
+	return flags.String("for", "", "coordinate inside the store, like decisions/api/security")
+}
+
 func runMap(env Env, args []string) error {
 	flags := flagSet("map")
-	where := flags.String("for", "", "coordinate inside the store")
+	where := coordinateFlag(flags)
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}

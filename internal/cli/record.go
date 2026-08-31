@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"os"
 	"path"
 	"path/filepath"
@@ -13,18 +14,33 @@ import (
 	"github.com/franwerner/openrecord/internal/store"
 )
 
+// recordWriteFlags is what `record write` accepts. It is a function rather than
+// a block inside the command so that help lists exactly what the command parses.
+type recordWriteOptions struct {
+	title, description, status, bodyFile *string
+	components                           *repeated
+}
+
+func recordWriteFlags(flags *flag.FlagSet) *recordWriteOptions {
+	options := &recordWriteOptions{components: &repeated{}}
+	options.title = flags.String("title", "", "the record's title")
+	options.description = flags.String("description", "", "the decision or behaviour in one line")
+	options.status = flags.String("status", string(store.Accepted), "accepted or pending")
+	options.bodyFile = flags.String("body-file", "", "file holding the body")
+	flags.Var(options.components, "components", "surfaces a spec reaches, repeatable — required for a spec")
+	return options
+}
+
 func runRecordWrite(env Env, args []string) error {
 	subject, rest := splitPositional(args)
 	flags := flagSet("record write")
-	title := flags.String("title", "", "the record's title")
-	description := flags.String("description", "", "the decision or behaviour in one line")
-	status := flags.String("status", string(store.Accepted), "accepted or pending")
-	bodyFile := flags.String("body-file", "", "file holding the body")
-	var components repeated
-	flags.Var(&components, "components", "surfaces a spec reaches (repeatable)")
+	options := recordWriteFlags(flags)
 	if err := parseFlags(flags, rest); err != nil {
 		return err
 	}
+	title, description := options.title, options.description
+	status, bodyFile := options.status, options.bodyFile
+	components := *options.components
 	target, err := oneArgument("record write", subject, "a path inside the store")
 	if err != nil {
 		return err
@@ -72,19 +88,32 @@ func runRecordWrite(env Env, args []string) error {
 
 var sectionPattern = regexp.MustCompile(`(?m)^##\s+.+?\s*$`)
 
+type recordEditOptions struct {
+	section, bodyFile, title, description, status *string
+	components                                    *repeated
+}
+
+func recordEditFlags(flags *flag.FlagSet) *recordEditOptions {
+	options := &recordEditOptions{components: &repeated{}}
+	options.section = flags.String("section", "", "the heading to replace, e.g. \"## Alternatives\"")
+	options.bodyFile = flags.String("body-file", "", "file holding the new section contents")
+	options.title = flags.String("title", "", "replace the title")
+	options.description = flags.String("description", "", "replace the description")
+	options.status = flags.String("status", "", "replace the status")
+	flags.Var(options.components, "components", "replace the surfaces a spec reaches")
+	return options
+}
+
 func runRecordEdit(env Env, args []string) error {
 	subject, rest := splitPositional(args)
 	flags := flagSet("record edit")
-	section := flags.String("section", "", "the heading to replace, e.g. \"## Alternatives\"")
-	bodyFile := flags.String("body-file", "", "file holding the new section contents")
-	title := flags.String("title", "", "replace the title")
-	description := flags.String("description", "", "replace the description")
-	status := flags.String("status", "", "replace the status")
-	var components repeated
-	flags.Var(&components, "components", "replace the surfaces a spec reaches")
+	options := recordEditFlags(flags)
 	if err := parseFlags(flags, rest); err != nil {
 		return err
 	}
+	section, bodyFile := options.section, options.bodyFile
+	title, description, status := options.title, options.description, options.status
+	components := *options.components
 	target, err := oneArgument("record edit", subject, "a path inside the store")
 	if err != nil {
 		return err

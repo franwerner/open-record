@@ -13,7 +13,7 @@ type validateReport struct {
 
 func runValidate(env Env, args []string) error {
 	flags := flagSet("validate")
-	where := flags.String("for", "", "coordinate inside the store")
+	where := coordinateFlag(flags)
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}

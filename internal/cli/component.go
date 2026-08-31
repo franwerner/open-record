@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"os"
 	"path"
 	"path/filepath"
@@ -10,16 +11,28 @@ import (
 	"github.com/franwerner/openrecord/internal/store"
 )
 
+type componentAddOptions struct {
+	paths              *repeated
+	title, description *string
+}
+
+func componentAddFlags(flags *flag.FlagSet) *componentAddOptions {
+	options := &componentAddOptions{paths: &repeated{}}
+	flags.Var(options.paths, "path", "a directory this surface owns, repeatable — at least one is required")
+	options.title = flags.String("title", "", "what the surface is called — required")
+	options.description = flags.String("description", "", "when a reader should descend here — required")
+	return options
+}
+
 func runComponentAdd(env Env, args []string) error {
 	subject, rest := splitPositional(args)
 	flags := flagSet("component add")
-	var paths repeated
-	flags.Var(&paths, "path", "a directory this surface owns (repeatable)")
-	title := flags.String("title", "", "what the surface is called")
-	description := flags.String("description", "", "when a reader should descend here")
+	options := componentAddFlags(flags)
 	if err := parseFlags(flags, rest); err != nil {
 		return err
 	}
+	paths := *options.paths
+	title, description := options.title, options.description
 	id, err := oneArgument("component add", subject, "an id")
 	if err != nil {
 		return err

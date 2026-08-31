@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"fmt"
 
 	openrecord "github.com/franwerner/openrecord"
@@ -14,9 +15,13 @@ type concernSummary struct {
 	Description string `json:"description"`
 }
 
+func concernsFlags(flags *flag.FlagSet) *bool {
+	return flags.Bool("json", false, "list the concerns as JSON instead of the document")
+}
+
 func runConcerns(env Env, args []string) error {
 	flags := flagSet("concerns")
-	asJSON := flags.Bool("json", false, "list the concerns as JSON instead of the document")
+	asJSON := concernsFlags(flags)
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}

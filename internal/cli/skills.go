@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"io/fs"
 	"path"
 	"regexp"
@@ -32,11 +33,23 @@ type skillsReport struct {
 	Note    string         `json:"note,omitempty"`
 }
 
+type skillsOptions struct {
+	into            *string
+	withQmd, dryRun *bool
+}
+
+func skillsFlags(flags *flag.FlagSet) *skillsOptions {
+	return &skillsOptions{
+		into:    flags.String("emit", "", "directory to write the skills into — required"),
+		withQmd: flags.Bool("with-qmd", false, "include the semantic-search passages and openrecord-setup-search"),
+		dryRun:  flags.Bool("dry-run", false, "report what would change without writing anything"),
+	}
+}
+
 func runSkills(env Env, args []string) error {
 	flags := flagSet("skills")
-	into := flags.String("emit", "", "directory to write the skills into")
-	withQmd := flags.Bool("with-qmd", false, "include the semantic-search passages and setup-record-search")
-	dryRun := flags.Bool("dry-run", false, "report what would change without writing anything")
+	options := skillsFlags(flags)
+	into, withQmd, dryRun := options.into, options.withQmd, options.dryRun
 	if err := parseFlags(flags, args); err != nil {
 		return err
 	}

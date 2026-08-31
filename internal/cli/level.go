@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"flag"
 	"os"
 	"path"
 	"path/filepath"
@@ -11,11 +12,20 @@ import (
 	"github.com/franwerner/openrecord/internal/store"
 )
 
+type levelAddOptions struct{ title, description *string }
+
+func levelAddFlags(flags *flag.FlagSet) *levelAddOptions {
+	return &levelAddOptions{
+		title:       flags.String("title", "", "what the level is called — defaulted for a concern or a spec type"),
+		description: flags.String("description", "", "when a reader should descend here — defaulted for a concern or a spec type"),
+	}
+}
+
 func runLevelAdd(env Env, args []string) error {
 	subject, rest := splitPositional(args)
 	flags := flagSet("level add")
-	title := flags.String("title", "", "what the level is called")
-	description := flags.String("description", "", "when a reader should descend here")
+	options := levelAddFlags(flags)
+	title, description := options.title, options.description
 	if err := parseFlags(flags, rest); err != nil {
 		return err
 	}

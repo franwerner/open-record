@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"strings"
 	"testing"
 
@@ -117,4 +118,60 @@ func TestRepoDefaultsToTheWorkingDirectory(t *testing.T) {
 	if captured == "" {
 		t.Error("Repo was not defaulted to the working directory")
 	}
+}
+
+// Help is derived from the parser each command actually uses, so this cannot
+// fail by construction — which is the point. It fails the moment somebody
+// registers a flag without routing it through the command's Flags function, and
+// that is exactly how `--components` and `--dry-run` came to be undiscoverable.
+func TestHelpListsEveryFlagACommandAccepts(t *testing.T) {
+	var walk func(prefix string, list []*Command)
+	walk = func(prefix string, list []*Command) {
+		for _, command := range list {
+			name := strings.TrimSpace(prefix + " " + command.Name)
+			if command.Flags != nil {
+				var out bytes.Buffer
+				writeCommandHelp(&out, command)
+
+				registered := flagSet(command.Name)
+				command.Flags(registered)
+				registered.VisitAll(func(item *flag.Flag) {
+					if !strings.Contains(out.String(), "--"+item.Name) {
+						t.Errorf("`%s --help` never mentions --%s", name, item.Name)
+					}
+					if strings.TrimSpace(item.Usage) == "" {
+						t.Errorf("--%s of `%s` has no description, so listing it says nothing", item.Name, name)
+					}
+				})
+			}
+			walk(name, command.Sub)
+		}
+	}
+	walk("", commands)
+}
+
+// A command that parses flags but does not declare them is one whose help is
+// silently incomplete. There is no legitimate case for it, so it is caught here
+// rather than noticed by a user who cannot find a flag.
+func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
+	// The commands with genuinely no flags of their own. Listing them is what
+	// makes adding one to another command fail here until it is declared.
+	flagless := map[string]bool{
+		"component remove": true,
+		"component owners": true,
+		"diagram":          true,
+		"qmd status":       true,
+		"version":          true,
+	}
+	var walk func(prefix string, list []*Command)
+	walk = func(prefix string, list []*Command) {
+		for _, command := range list {
+			name := strings.TrimSpace(prefix + " " + command.Name)
+			if command.Run != nil && command.Flags == nil && !flagless[name] {
+				t.Errorf("`%s` runs but declares no flags; if it truly has none, say so in the list above", name)
+			}
+			walk(name, command.Sub)
+		}
+	}
+	walk("", commands)
 }

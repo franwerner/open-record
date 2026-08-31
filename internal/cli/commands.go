@@ -8,6 +8,7 @@ var commands = []*Command{
 		Name:    "map",
 		Summary: "Navigate the store, one level at a time.",
 		Usage:   "openrecord map [--for COORDINATE]",
+		Flags:   describes(coordinateFlag),
 		Run:     runMap,
 	},
 	{
@@ -18,6 +19,7 @@ var commands = []*Command{
 				Name:    "add",
 				Summary: "Declare a surface and create its folder.",
 				Usage:   "openrecord component add ID --path DIR --title TITLE --description TEXT",
+				Flags:   describes(componentAddFlags),
 				Run:     runComponentAdd,
 			},
 			{
@@ -42,6 +44,7 @@ var commands = []*Command{
 				Name:    "add",
 				Summary: "Create a level, defaulting its description from the catalogue.",
 				Usage:   "openrecord level add COORDINATE [--title TITLE] [--description TEXT]",
+				Flags:   describes(levelAddFlags),
 				Run:     runLevelAdd,
 			},
 		},
@@ -53,13 +56,15 @@ var commands = []*Command{
 			{
 				Name:    "write",
 				Summary: "Write a record whole, validating before it lands.",
-				Usage:   "openrecord record write PATH --title TITLE --description TEXT --status STATUS --body-file FILE",
+				Usage:   "openrecord record write PATH --title TITLE --description TEXT --status STATUS --body-file FILE [--components ID]",
+				Flags:   describes(recordWriteFlags),
 				Run:     runRecordWrite,
 			},
 			{
 				Name:    "edit",
 				Summary: "Replace one section, revalidating the whole file.",
 				Usage:   "openrecord record edit PATH --section HEADING --body-file FILE",
+				Flags:   describes(recordEditFlags),
 				Run:     runRecordEdit,
 			},
 		},
@@ -68,12 +73,14 @@ var commands = []*Command{
 		Name:    "validate",
 		Summary: "Check a coordinate is well-formed, recursively.",
 		Usage:   "openrecord validate [--for COORDINATE]",
+		Flags:   describes(coordinateFlag),
 		Run:     runValidate,
 	},
 	{
 		Name:    "grep",
 		Summary: "Literal search, scoped to a coordinate.",
 		Usage:   "openrecord grep TERM [--for COORDINATE]",
+		Flags:   describes(coordinateFlag),
 		Run:     runGrep,
 	},
 	{
@@ -86,12 +93,14 @@ var commands = []*Command{
 		Name:    "skills",
 		Summary: "Emit the bundled agent skills into a directory.",
 		Usage:   "openrecord skills --emit DIR [--with-qmd] [--dry-run]",
+		Flags:   describes(skillsFlags),
 		Run:     runSkills,
 	},
 	{
 		Name:    "concerns",
 		Summary: "Print the concerns catalogue: what kinds of decision are worth recording.",
 		Usage:   "openrecord concerns [--json]",
+		Flags:   describes(concernsFlags),
 		Run:     runConcerns,
 	},
 	{
@@ -107,7 +116,8 @@ var commands = []*Command{
 			{
 				Name:    "install",
 				Summary: "Install qmd, so records can be found by meaning.",
-				Usage:   "openrecord qmd install",
+				Usage:   "openrecord qmd install [--force]",
+				Flags:   describes(qmdInstallFlags),
 				Run:     runQmdInstall,
 			},
 		},

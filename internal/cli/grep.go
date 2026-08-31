@@ -28,7 +28,7 @@ type grepReport struct {
 func runGrep(env Env, args []string) error {
 	subject, rest := splitPositional(args)
 	flags := flagSet("grep")
-	where := flags.String("for", "", "coordinate inside the store")
+	where := coordinateFlag(flags)
 	if err := parseFlags(flags, rest); err != nil {
 		return err
 	}
