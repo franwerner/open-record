@@ -17,10 +17,22 @@ No `.openrecord/` directory, or an empty one → this skill does not apply. Say 
 create a store because you noticed one is missing; offer, do not impose, and only if the user is
 heading somewhere it would help.
 
-## Nobody approves a record
+## Nobody approves a record — here
 
 The store maintains itself. You do not present a list and wait for someone to approve it — you resolve
 what should be written and you write it.
+
+**Who confirms depends on where the reasoning came from.** One rule, three skills:
+
+| The *why* came from | Who confirms |
+| --- | --- |
+| Work you just did — **this skill** | Nobody. You resolve it and write it, then report. |
+| The user, answering questions — `openrecord-bootstrap` | They do, record by record. |
+| The existing code — `openrecord-mine` | They do, over candidates. Nothing is materialised unconfirmed. |
+
+The line is authorship, not caution. Here you have the reasoning first-hand, because you did the work.
+In the other two it belongs to somebody else, and writing it down unratified puts words in their mouth
+that will later read as settled.
 
 **The one thing that stops is a contradiction with an accepted record.** That is the only gate, and it
 exists because a record was ratified by a person and overriding it is not yours to do.
@@ -141,8 +153,27 @@ openrecord record edit specs/rule/usage-limits.md \
   --body-file ./new-rule.md
 ```
 
+A spec also needs **`--components`**, which is mandatory and validated — one flag per surface,
+repeatable. A capability that declares none crosses with no path and drops out of every scope check
+silently, which is why it is refused rather than defaulted:
+
+```
+openrecord record write specs/flow/sign-up.md \
+  --title "Sign up" \
+  --description "A visitor registers with email and password; the account stays pending until they verify." \
+  --status accepted \
+  --components api --components web \
+  --body-file ./body.md
+```
+
 The binary validates both halves and writes nothing if anything fails. A rejected write is information,
 not an obstacle — read the findings and fix the record, do not work around them.
+
+**A clean write is not a clean store.** A successful write reports only what is wrong with *that
+record*; findings about the store as a whole — a level grown flat, a surface pointing at a directory
+that no longer exists, a folder no component claims — are produced by `openrecord validate` and by
+nothing else. `"warnings": []` on a write says nothing about them. Run `validate` once when you are
+done writing.
 
 **The `description` carries the most weight of anything you write.** It is what a future reader sees
 when deciding whether to open the file, and no index lists anything else. Write the decision itself, in

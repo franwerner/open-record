@@ -1,5 +1,5 @@
 ---
-name: setup-record-search
+name: openrecord-setup-search
 description: Register a project's openrecord stores with qmd so records can be found by meaning, not only by exact wording. USE THIS SKILL once per project — when semantic search over the records is not available and should be, when a store is added or removed and the registration no longer matches, or when the user asks to set up record search. This is setup, not searching; it runs once, not on every lookup.
 ---
 
@@ -63,14 +63,57 @@ one — and it fails quietly, by returning the wrong project's records rather th
 - **Paths are absolute** when registering, resolved against the repository root, even though everything
   else in openrecord speaks in store-relative coordinates.
 
-## Credentials live in the environment
+## Check the provider before registering anything
 
 Whatever provides the embeddings, its configuration belongs in the environment — **never in a file that
 gets committed.** A store is versioned and shared; a key in it is a key published.
 
-Without a working provider, indexing fails **halfway** and leaves the index partly built. That state is
-worse than no index, because searches return real-looking results over a fraction of the store and
-nothing announces the gap. If the provider is not configured, say so and stop rather than starting.
+Without a working provider, registration still *succeeds*: `qmd collection add` indexes the text and
+only the embedding pass needs the provider. So the failure arrives after every collection is registered
+and half-built — searches then return real-looking results over a fraction of the store, and nothing
+announces the gap.
+
+Which means the check has to come **first**, before the first `collection add`:
+
+```
+openrecord qmd status     # is qmd there, does it run, is it the pinned version
+qmd doctor                # is the provider reachable and the index healthy
+```
+
+If `qmd doctor` reports the provider failing — an expired key shows as a `401` — say so and **stop**.
+Do not register collections that cannot be embedded.
+
+## Register
+
+Two commands per collection, and the first one indexes as it registers:
+
+```
+qmd collection add "$(pwd)/.openrecord/decisions/api" \
+    --name myproject-decisions-api --mask '**/*.md'
+
+qmd collection add "$(pwd)/.openrecord/specs" \
+    --name myproject-specs --mask '**/*.md'
+```
+
+`openrecord qmd status` lists exactly the collection names this project needs, derived from its declared
+components — use that list rather than composing the names yourself:
+
+```
+openrecord qmd status
+→ collections_needed: myproject-decisions-api, myproject-decisions-web,
+                      myproject-decisions-cli, myproject-decisions-root,
+                      myproject-specs
+```
+
+Then embed, once, and confirm nothing is left pending:
+
+```
+qmd embed
+qmd status        # "Pending: 0 need embedding"
+```
+
+A run that ends with documents still pending is the half-built state above. It is not done until that
+number is zero.
 
 ## Re-run it when the components change
 
@@ -89,3 +132,8 @@ mirror. Anything in one and not the other is drift.
 It does not make search authoritative. Even fully indexed, **no search proves an absence** — coming
 back empty means you did not find something, not that there is nothing there. Coverage still comes from
 reading the indexes with `map`.
+
+And it cannot make an empty answer trustworthy on its own. A query whose provider is unreachable prints
+`No results found.` and exits 0, exactly as a genuine miss does. Anything reporting that a search found
+nothing has to have established that the search ran — which is what the check above is for, and why it
+is worth re-running when a result surprises you.

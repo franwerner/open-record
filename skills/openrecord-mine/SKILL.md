@@ -17,6 +17,18 @@ Every output of this skill is a candidate for a person to confirm, reject or cor
 materialised without that confirmation — not in bulk, not because the evidence looks strong, not
 because the user said "go ahead" about a different candidate.
 
+**Who confirms depends on where the reasoning came from.** One rule, three skills:
+
+| The *why* came from | Who confirms |
+| --- | --- |
+| The existing code — **this skill** | They do, over candidates. Nothing is materialised unconfirmed. |
+| The user, answering questions — `openrecord-bootstrap` | They do, record by record. |
+| Work you just did — `openrecord-capture` | Nobody. It resolves and writes, then reports. |
+
+The line is authorship, not caution. Capture has the reasoning first-hand. Here the code cannot tell you
+why, so anything you write down unratified puts words in somebody's mouth that will later read as
+settled.
+
 Present them ordered by how strong the evidence is, each one anchored to what it was mined from: *this
 candidate, from these files, because of this*. A candidate a reader cannot trace back is one they have
 to take on faith, and this is exactly the material that should not be taken on faith.
@@ -71,6 +83,22 @@ A candidate that says *"this is what the code does; the reasoning is not recorde
 useful. One that says *"this was chosen for testability"* — when no one said that — is a fabrication
 wearing the store's authority.
 
+### A why that is written down is evidence, not invention
+
+Sometimes the reasoning **is** in the repository: a package comment explaining why a dependency was
+avoided, a line above a pinned version saying what broke without the pin, a commit message that argues
+rather than describes. That is a person stating their reason, in a place the store does not index.
+
+Quoting it is neither recovering the why from behaviour nor composing one. So:
+
+- **Quote it, marked as quoted**, and say where it came from — the reader can go and check.
+- **Do not paraphrase it into the record's voice.** A paraphrase reads as ratified prose and loses the
+  fact that it came from a comment somebody may since have outgrown.
+- **Do not stretch it.** A comment explaining why *one* package is hand-rolled is not a statement about
+  the project's stance on dependencies, however tempting the generalisation.
+
+Where there is no such comment, the rule above is unchanged: say the reasoning is not recorded.
+
 ## Do not mine what is already there
 
 Check the store before proposing anything:
@@ -83,6 +111,21 @@ openrecord grep "<topic>" --for decisions
 A candidate duplicating an existing record is noise, and worse, it invites a second record saying
 almost the same thing in different words. If the store covers it but the code has drifted, that is a
 different and more interesting finding — say that instead.
+
+**`grep` is literal, and this is the check where that hurts most.** A record covering your candidate in
+other words passes the check and the duplicate gets written — which is precisely the failure the check
+exists to prevent. So read the level's listing with `map` as well: the descriptions are one line each
+and they state the decision, so a duplicate is visible there even when its wording differs.
+<!-- qmd:start -->
+Better, ask by meaning rather than by wording:
+
+```
+qmd query "how request limits are applied" -c <project>-decisions-api
+```
+
+This is the one step where semantic search is doing work nothing else can: it is looking for a record
+whose words you do not know, which is the definition of a duplicate you are about to create.
+<!-- qmd:end -->
 
 ## Do not try to mine everything
 

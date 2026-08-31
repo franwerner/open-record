@@ -22,7 +22,7 @@ import (
 var qmdBlock = regexp.MustCompile(`(?s)[ \t]*<!--\s*qmd:start\s*-->.*?<!--\s*qmd:end\s*-->\n*`)
 
 // qmdOnly are the skills that exist only to set semantic search up.
-var qmdOnly = map[string]bool{"setup-record-search": true}
+var qmdOnly = map[string]bool{"openrecord-setup-search": true}
 
 type skillsReport struct {
 	Into    string         `json:"into"`

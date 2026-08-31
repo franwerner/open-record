@@ -26,11 +26,20 @@ An empty store is a project that has not adopted this. That is a legitimate stat
 
 ```
 openrecord component owners src/api/handlers/user.go
+→ owner: api
+  map:   decisions/api
+  specs: specs/flow/checkout/place-an-order.md
+         specs/rule/usage-limits.md
 ```
 
 Returns the component that owns the path. If it reports that nothing is declared, stop and say so —
 without a declared surface there is nothing to check against, and guessing which component a file
 belongs to defeats the whole mechanism.
+
+**It answers both halves.** `map` is where the decisions governing this file are filed. `specs` is every
+capability that declares this surface — those cannot be resolved from a path, because a capability
+crosses surfaces and names them instead of living under one. Both lists are the starting point, not the
+answer: descending is still what enumerates.
 
 **2. Descend, reading descriptions.**
 
@@ -71,10 +80,17 @@ another.
 
 ```
 openrecord grep "rate limit" --for decisions/api
+→ decisions/api/security/rate-limits/at-the-gateway.md   [record]  line 12, 6 hits
+  decisions/api/security/INDEX.md                        [group]   line 3,  1 hit
 ```
 
-A hit comes back as a path, and that path **is** a `map` coordinate — so a search leaves you standing
-at the right level to keep descending.
+One entry per file, never per line, with `hits` saying how many lines matched — which is the difference
+between *mentioned once in passing* and *this is what the record is about*.
+
+**A hit is a file, not a level.** Open a `record`; descend into a `group`'s **parent**. Feeding a hit
+path straight to `map` is the obvious next move and it is wrong — `map --for decisions/api/security` is
+the level, `decisions/api/security/rate-limits/at-the-gateway.md` is the file. The tool says so if you
+try it, rather than reporting that a path nobody wrote does not exist.
 
 `grep` is literal, which makes it the cheap and precise half of finding something: it hits exactly when
 you remember the wording, and misses entirely when the record says the same thing in other words.
@@ -92,6 +108,18 @@ component, mirroring the fact that they are closed by component — a result fro
 a weaker match, it is an answer to a different question. Pass several `-c` flags only when you are
 deliberately looking across surfaces.
 
+**A qmd result is not a coordinate.** It comes back as
+`qmd://<project>-decisions-api/security/rate-limits/at-the-gateway.md:12`. The coordinate is
+`decisions/api/security/rate-limits/at-the-gateway.md` — drop the scheme, read the surface out of the
+collection name, and drop the line number. This is the one place in the walk where a path has to be
+translated, so do it before comparing against anything the other two steps found.
+
+**Check that the search actually ran before you believe it found nothing.** A provider that is
+unreachable or whose credential has expired produces `No results found.` and exit 0 — the same answer
+as a genuine miss, with the failure printed as a line you can scroll past. Run
+`openrecord qmd status` first: it says whether qmd runs at all. If a query returns nothing, say
+*"the semantic step returned nothing"* only when you know it ran; otherwise say it was unavailable.
+
 If `qmd` is not installed or the collections are not registered, say so and continue with what the
 steps above found — it is a missing capability, not a failure.
 <!-- qmd:end -->
@@ -106,13 +134,18 @@ was missed.
 
 ## Surfacing is not governing
 
-The steps above produce **candidates**, deduplicated by path — and because they all return paths, and a
-path is a coordinate, nothing has to be translated between them.
+The steps above produce **candidates**, deduplicated by path. They speak the store's own paths, so a
+hit from one is comparable with a hit from another without conversion.
+<!-- qmd:start -->
+The one exception is a semantic hit, which arrives as a `qmd://` URL and has to be translated back to a
+coordinate first — see above.
+<!-- qmd:end -->
 
 They find different things, which is why none of them travels alone:
 
 | | Finds | Misses |
 | --- | --- | --- |
+| `component owners` | Which surface the file is in, and every capability that names it. | Nothing about *which* of them applies. |
 | The descent | Everything filed under the concerns you entered. The only one that *enumerates*. | What sits in a concern you did not think to enter. |
 | `grep` | Exact wording. | The record that says the same thing in other words. |
 <!-- qmd:start -->

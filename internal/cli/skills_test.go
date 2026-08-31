@@ -38,7 +38,7 @@ func TestSkillsEmitWithoutQmdMentionsItNowhere(t *testing.T) {
 	if len(files) == 0 {
 		t.Fatal("nothing was emitted")
 	}
-	if _, present := files["setup-record-search"]; present {
+	if _, present := files["openrecord-setup-search"]; present {
 		t.Error("setup-record-search was emitted without --with-qmd")
 	}
 	for name, contents := range files {
@@ -59,8 +59,8 @@ func TestSkillsEmitWithQmdIsByteIdenticalToTheSource(t *testing.T) {
 	mustRun(t, repo, "skills", "--emit", out, "--with-qmd")
 
 	files := emitted(t, out)
-	if _, present := files["setup-record-search"]; !present {
-		t.Error("setup-record-search was not emitted with --with-qmd")
+	if _, present := files["openrecord-setup-search"]; !present {
+		t.Error("openrecord-setup-search was not emitted with --with-qmd")
 	}
 	for name, contents := range files {
 		source, err := openrecord.Assets.ReadFile("skills/" + name + "/SKILL.md")
