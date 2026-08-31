@@ -49,7 +49,7 @@ func runDiagram(env Env, args []string) error {
 	// A spec that does not hold together produces a diagram that quietly lies,
 	// so it fails with the same finding validate would give.
 	if finding.HasError(findings) {
-		return writeRejected(env, relative, check.Sorted(findings))
+		return writeRejected(env, "rendered", relative, check.Sorted(findings))
 	}
 
 	sections := diagramSections(record.Body)

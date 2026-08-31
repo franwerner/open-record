@@ -60,7 +60,7 @@ func runRecordWrite(env Env, args []string) error {
 	// way out, a level growing flat — and refusing to record something over one
 	// would make the store harder to keep than to abandon.
 	if finding.HasError(findings) {
-		return writeRejected(env, relative, findings)
+		return writeRejected(env, "written", relative, findings)
 	}
 
 	full := filepath.Join(coordinate.Dir(env.Repo), slug+".md")
@@ -102,7 +102,7 @@ func runRecordEdit(env Env, args []string) error {
 	}
 	existing, findings := store.ParseRecord(raw, coordinate.Kind, relative)
 	if finding.HasError(findings) {
-		return writeRejected(env, relative, check.Sorted(findings))
+		return writeRejected(env, "edited", relative, check.Sorted(findings))
 	}
 
 	if *section != "" {
@@ -144,7 +144,7 @@ func runRecordEdit(env Env, args []string) error {
 	// against a ## Main flow it never touched.
 	found := check.Sorted(check.Record(rendered, coordinate, declared, relative))
 	if finding.HasError(found) {
-		return writeRejected(env, relative, found)
+		return writeRejected(env, "edited", relative, found)
 	}
 	if err := os.WriteFile(full, rendered, 0o644); err != nil {
 		return Errorf(finding.CodeUsage, "write %s: %v", relative, err)
@@ -246,9 +246,13 @@ func warningsOnly(findings []finding.Finding) []finding.Finding {
 // writeRejected reports why nothing was written. The findings go to stdout in
 // the same shape validate uses, so a caller reads one vocabulary whenever it
 // finds out.
-func writeRejected(env Env, path string, findings []finding.Finding) error {
+//
+// The verb is the caller's, not this function's: an edit that reports its
+// failure under "written" leaves anything watching for "edited" seeing neither
+// success nor failure.
+func writeRejected(env Env, verb, path string, findings []finding.Finding) error {
 	if err := env.WriteJSON(map[string]any{
-		"written":  nil,
+		verb:       nil,
 		"path":     path,
 		"findings": findings,
 	}); err != nil {
