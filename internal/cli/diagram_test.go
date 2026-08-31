@@ -37,14 +37,21 @@ func TestDiagramRendersEachType(t *testing.T) {
 		t.Errorf("the branch is not attached to its anchor step: %s", out)
 	}
 
+	// A state name with a space in it, because that is what real ones look like
+	// and it is the only shape that emits an alias line at all.
 	lifecycle := writeSpec(t, repo, "lifecycle", "account",
-		"## Purpose\n\nx\n\n## States and transitions\n\n- pending → active (verifies the email)\n- pending → expired (48h elapse)\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n")
+		"## Purpose\n\nx\n\n## States and transitions\n\n- pending → awaiting review (verifies the email)\n- pending → expired (48h elapse)\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n")
 	out = mustRun(t, repo, "diagram", lifecycle)
 	if !strings.HasPrefix(out, "stateDiagram-v2") {
 		t.Errorf("lifecycle did not render as a state diagram: %s", out)
 	}
-	if !strings.Contains(out, "pending --> active: \"verifies the email\"") {
+	// A transition label runs to the end of the line, so it carries no quotes —
+	// quoting it puts the quotes in the label a reader sees.
+	if !strings.Contains(out, "pending --> awaiting_review: verifies the email") {
 		t.Errorf("the transition and its trigger are missing: %s", out)
+	}
+	if !strings.Contains(out, `state "awaiting review" as awaiting_review`) || strings.Contains(out, `""`) {
+		t.Errorf("the alias is missing or double-quoted, which mermaid rejects: %s", out)
 	}
 
 	process := writeSpec(t, repo, "process", "reconcile",

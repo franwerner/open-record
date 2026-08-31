@@ -18,6 +18,7 @@ var (
 	diagramBranch     = regexp.MustCompile(`^\s*-\s+\*\*\[(\d+)\]\s*(.*?)\*\*\s*(?:→|->)\s*(.*\S)\s*$`)
 	diagramTransition = regexp.MustCompile(`^\s*-\s+(.+?)\s*(?:→|->)\s*(.+?)\s*(?:\((.*)\))?\s*$`)
 	diagramHeading    = regexp.MustCompile(`(?m)^##\s+(.+?)\s*$`)
+	diagramBullet     = regexp.MustCompile(`^\s*[-*]\s`)
 )
 
 func runDiagram(env Env, args []string) error {
@@ -70,6 +71,12 @@ func runDiagram(env Env, args []string) error {
 	return nil
 }
 
+// diagramContinuation is a line that continues the one above it: indented, and
+// not itself the start of a new item. Prose in a record wraps — every markdown
+// file here wraps at about a hundred columns — so a renderer that reads a step
+// as one physical line silently cuts most steps in half.
+var diagramContinuation = regexp.MustCompile(`^\s+\S`)
+
 func diagramSections(body string) map[string][]string {
 	sections := map[string][]string{}
 	current := ""
@@ -78,9 +85,21 @@ func diagramSections(body string) map[string][]string {
 			current = "## " + match[1]
 			continue
 		}
-		if current != "" && strings.TrimSpace(line) != "" {
-			sections[current] = append(sections[current], line)
+		if current == "" || strings.TrimSpace(line) == "" {
+			continue
 		}
+		// Folded into the previous line rather than kept as its own: what the
+		// patterns below match is a whole item, however many lines it took to
+		// write. A line that starts an item of its own — a step, a bullet — is
+		// never folded, so a nested list is left alone instead of being merged
+		// into its parent.
+		held := sections[current]
+		if len(held) > 0 && diagramContinuation.MatchString(line) &&
+			!diagramStep.MatchString(line) && !diagramBullet.MatchString(line) {
+			held[len(held)-1] += " " + strings.TrimSpace(line)
+			continue
+		}
+		sections[current] = append(held, line)
 	}
 	return sections
 }
@@ -118,7 +137,11 @@ func flowchart(mainFlow, branches []string, trigger string) string {
 	// A branch is drawn as a labelled edge off the step it is anchored to,
 	// rather than as invented control flow: the anchor is the only ordering the
 	// prose actually states.
-	for index, line := range branches {
+	// Counted over branches, not over lines: the id is what a reader follows
+	// between two renders of the same spec, so a line that is not a branch must
+	// not consume a number.
+	drawn := 0
+	for _, line := range branches {
 		match := diagramBranch.FindStringSubmatch(line)
 		if match == nil {
 			continue
@@ -127,7 +150,8 @@ func flowchart(mainFlow, branches []string, trigger string) string {
 		if !known {
 			continue
 		}
-		id := fmt.Sprintf("B%d", index+1)
+		drawn++
+		id := fmt.Sprintf("B%d", drawn)
 		out.WriteString(fmt.Sprintf("    %s[%s]\n", id, mermaidText(match[3])))
 		out.WriteString(fmt.Sprintf("    %s -->|%s| %s\n", from, mermaidText(strings.TrimSpace(match[2])), id))
 	}
@@ -147,7 +171,10 @@ func stateDiagram(transitions []string) string {
 		id := mermaidID(name, len(ids))
 		ids[name] = id
 		if id != name {
-			declared = append(declared, fmt.Sprintf("    state \"%s\" as %s\n", mermaidText(name), id))
+			// mermaidText already quotes. Quoting it again produces `state ""x""`,
+			// which mermaid refuses to parse — losing the whole diagram rather
+			// than rendering it oddly.
+			declared = append(declared, fmt.Sprintf("    state %s as %s\n", mermaidText(name), id))
 		}
 		return id
 	}
@@ -162,7 +189,9 @@ func stateDiagram(transitions []string) string {
 		to := identify(strings.TrimSpace(match[2]))
 		edge := fmt.Sprintf("    %s --> %s", from, to)
 		if trigger := strings.TrimSpace(match[3]); trigger != "" {
-			edge += ": " + mermaidText(trigger)
+			// A transition label runs to the end of the line, so it is not
+			// quoted: quotes here render as part of the label.
+			edge += ": " + mermaidEscape(trigger)
 		}
 		edges = append(edges, edge+"\n")
 	}
@@ -190,8 +219,16 @@ var mermaidEscapes = strings.NewReplacer(
 	"|", "#124;",
 )
 
+// mermaidEscape escapes without quoting, for the positions where a label runs to
+// the end of the line and a quote would be part of it.
+func mermaidEscape(value string) string {
+	return mermaidEscapes.Replace(strings.TrimSpace(value))
+}
+
+// mermaidText is mermaidEscape plus the quotes a bracketed label needs. Callers
+// pass its result straight into the diagram — never into another pair of quotes.
 func mermaidText(value string) string {
-	return `"` + mermaidEscapes.Replace(strings.TrimSpace(value)) + `"`
+	return `"` + mermaidEscape(value) + `"`
 }
 
 // mermaidID turns a state name into an identifier, falling back to a positional
