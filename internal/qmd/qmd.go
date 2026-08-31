@@ -18,32 +18,75 @@ import (
 // Binary is the command qmd installs as.
 const Binary = "qmd"
 
-// InstallSource is the packed tarball attached to a qmd release.
+// PinnedVersion is the qmd release openrecord is built against. Bumping qmd is
+// editing this line and the matching one in scripts/install.sh.
+const PinnedVersion = "2.8.3-mate.5"
+
+// InstallSource is the packed tarball attached to that release.
 //
 // A tarball rather than the git URL, deliberately: npm runs a git dependency's
 // `prepare` in a clone with no node_modules, so the build cannot find its
 // compiler and the install dies. Installing a tarball runs no prepare at all —
 // the built dist/ inside it is used as-is. It also pins a version, which a git
 // URL does not.
-//
-// One constant because it is the one thing here likely to change; bumping qmd
-// is editing this line and the matching one in scripts/install.sh.
-const InstallSource = "https://github.com/franwerner/qmd/releases/download/v2.8.3-mate.4/tobilu-qmd-2.8.3-mate.4.tgz"
+const InstallSource = "https://github.com/franwerner/qmd/releases/download/v" +
+	PinnedVersion + "/tobilu-qmd-" + PinnedVersion + ".tgz"
 
 // Status is what can be known about qmd from outside it.
 type Status struct {
 	Installed bool   `json:"installed"`
 	Path      string `json:"path,omitempty"`
 	Version   string `json:"version,omitempty"`
+	// Usable is nil when nothing asked. Present-and-broken is a real state and
+	// a common one — a qmd whose native database bindings are missing answers
+	// --version and dies on every command that opens the index — so it is
+	// reported rather than folded into Installed.
+	Usable *bool `json:"usable,omitempty"`
+	// Trouble is what the unusable one said, so a caller has something to act
+	// on beyond "it did not work".
+	Trouble string `json:"trouble,omitempty"`
 }
 
-// Check looks for qmd on the PATH and asks it for its version.
+// IsPinned reports whether this is the release openrecord was built against.
+func (s Status) IsPinned() bool {
+	return s.Installed && strings.Contains(s.Version, PinnedVersion)
+}
+
+// Check looks for qmd on the PATH and asks it for its version. It does not ask
+// whether qmd works — see Probe.
 func Check() Status {
 	path, err := exec.LookPath(Binary)
 	if err != nil {
 		return Status{}
 	}
 	return Status{Installed: true, Path: path, Version: version(path)}
+}
+
+// Probe is Check plus the question that matters before telling somebody to go
+// and use qmd: does it run.
+//
+// `--version` is the one command that does not open the index, so answering it
+// proves nothing about the install. This runs `status`, which does, and which
+// is read-only.
+func Probe() Status {
+	status := Check()
+	if !status.Installed {
+		return status
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	command := exec.CommandContext(ctx, status.Path, "status")
+	output, err := command.CombinedOutput()
+	usable := err == nil
+	status.Usable = &usable
+	if !usable {
+		status.Trouble = firstLine(string(output))
+		if status.Trouble == "" {
+			status.Trouble = err.Error()
+		}
+	}
+	return status
 }
 
 // version asks the binary what it is. A tool that does not answer is still
@@ -57,6 +100,17 @@ func version(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(output))
+}
+
+// firstLine keeps the line a person would read, out of whatever a failing
+// program decided to print — which for a Node stack trace is a great deal.
+func firstLine(output string) string {
+	for _, line := range strings.Split(output, "\n") {
+		if trimmed := strings.TrimSpace(line); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 // Install runs the package manager, streaming its output so a slow build does

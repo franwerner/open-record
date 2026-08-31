@@ -21,7 +21,10 @@ WITH_QMD="${WITH_QMD:-}"
 # a local would be out of scope and `set -u` would abort the cleanup — leaving
 # the temp directory behind and failing an otherwise successful install.
 tmp=""
-QMD_SOURCE="https://github.com/franwerner/qmd/releases/download/v2.8.3-mate.4/tobilu-qmd-2.8.3-mate.4.tgz"
+# Kept in step with internal/qmd/qmd.go by hand — the binary and this script are
+# the two places that name a qmd release, and they have to agree.
+QMD_VERSION="2.8.3-mate.5"
+QMD_SOURCE="https://github.com/franwerner/qmd/releases/download/v${QMD_VERSION}/tobilu-qmd-${QMD_VERSION}.tgz"
 
 # Always returns 0: a trap that ends on a non-zero status makes a successful
 # install exit non-zero, and a piped installer reads that as a failure.
@@ -85,10 +88,33 @@ want_qmd() {
   case "$answer" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 
+# qmd_is_usable answers the question `command -v` cannot: does the qmd on the
+# PATH run. A qmd whose native database bindings are missing answers --version
+# and dies on everything else, so presence alone would report success and leave
+# the user with a tool that fails on its first real command.
+qmd_is_usable() {
+  command -v qmd >/dev/null 2>&1 || return 1
+  qmd status >/dev/null 2>&1
+}
+
 install_qmd() {
+  if qmd_is_usable; then
+    local found
+    found="$(qmd --version 2>/dev/null || true)"
+    case "$found" in
+      *"$QMD_VERSION"*) info "qmd is already installed ($found)"; return 0 ;;
+      *)
+        # Usable, just not the version openrecord was built against. Replacing
+        # it is not this script's call — an installer that silently downgrades
+        # a working tool is worse than one that says something.
+        info "qmd is already installed ($found), which is not the pinned $QMD_VERSION"
+        printf "         Install the pinned one with: openrecord qmd install --force\n"
+        return 0
+        ;;
+    esac
+  fi
   if command -v qmd >/dev/null 2>&1; then
-    info "qmd is already installed"
-    return 0
+    info "qmd is on the PATH but does not run; reinstalling"
   fi
   if ! command -v npm >/dev/null 2>&1; then
     # Not fatal: openrecord is installed and works without it.

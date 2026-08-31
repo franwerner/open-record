@@ -1,7 +1,10 @@
 package qmd
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -58,5 +61,20 @@ func TestCheckIsSafeWhereverItRuns(t *testing.T) {
 	}
 	if status.Installed && status.Path == "" {
 		t.Error("an installed tool reported no path")
+	}
+}
+
+// The pinned release is named in two places — here and in the install script —
+// and they have to agree. Nothing else would notice them drifting: the script
+// would install one version and the binary would report a mismatch against the
+// other, on every machine, forever.
+func TestTheInstallScriptPinsTheSameVersion(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "install.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `QMD_VERSION="` + PinnedVersion + `"`
+	if !strings.Contains(string(raw), want) {
+		t.Errorf("scripts/install.sh does not pin %s; expected a line reading %s", PinnedVersion, want)
 	}
 }
