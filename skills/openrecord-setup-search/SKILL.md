@@ -63,29 +63,78 @@ one — and it fails quietly, by returning the wrong project's records rather th
 - **Paths are absolute** when registering, resolved against the repository root, even though everything
   else in openrecord speaks in store-relative coordinates.
 
-## Check the provider before registering anything
-
-Whatever provides the embeddings, its configuration belongs in the environment — **never in a file that
-gets committed.** A store is versioned and shared; a key in it is a key published.
+## Set the provider up before registering anything
 
 Without a working provider, registration still *succeeds*: `qmd collection add` indexes the text and
 only the embedding pass needs the provider. So the failure arrives after every collection is registered
 and half-built — searches then return real-looking results over a fraction of the store, and nothing
-announces the gap.
+announces the gap. Which is why every step below comes before the first `collection add`.
 
-Which means the check has to come **first**, before the first `collection add`:
+**A fresh qmd is not configured for a hosted provider.** It starts on local models it has not
+downloaded, so an install that looks fine fails at the first embed with *"Failed to get embedding
+dimensions from first chunk"*. There are two ways out and they are both qmd's, not openrecord's: pull
+the local models, or point it at a hosted API. The second is what the rest of this describes.
+
+**1. Is qmd there, does it run, and which collections does this project need?**
 
 ```
-openrecord qmd status     # is qmd there, does it run, is it the pinned version
-qmd doctor                # is the provider reachable and the index healthy
+openrecord qmd status
 ```
 
-If `qmd doctor` reports the provider failing — an expired key shows as a `401` — say so and **stop**.
-Do not register collections that cannot be embedded.
+`usable: false` means it is on the PATH and does not run — reinstall with
+`openrecord qmd install --force` before anything else. `collections_needed` is the list to register
+below; take the names from there rather than composing them.
+
+**2. Point qmd at the provider.** The models go in its index config, `~/.config/qmd/index.yml`:
+
+```yaml
+models:
+  embed: openai/text-embedding-3-small
+  generate: openai/gpt-4o-mini
+```
+
+**The index config wins over the environment.** `QMD_EMBED_MODEL` only applies when that file names no
+model, and `collection add` writes the local defaults into it — so a model set only by environment
+variable stops taking effect the moment the first collection is registered, silently. Set it in the
+file. Writing it before registering is safe: `collection add` fills in what is missing and leaves what
+is there.
+
+**3. Put the credentials in the environment** — **never in a file that gets committed.** A store is
+versioned and shared; a key in it is a key published.
+
+```
+export QMD_OPENAI_API_KEY=...
+export QMD_OPENAI_BASE_URL=https://openrouter.ai/api/v1   # or whichever endpoint
+```
+
+**4. Confirm it before spending a registration on it.**
+
+```
+qmd doctor
+```
+
+Two lines say whether the configuration took:
+
+- **`model cache: missing`** naming `hf:` models — qmd is still on the local ones, so the config above
+  is not being read. Fix that before going on. The same line naming your *hosted* models is expected
+  and not a problem: they are not files, so there is nothing to cache.
+- **`QMD_EMBED_MODEL is set to X but index config uses Y`** — the file is winning, as it should. Fix
+  the file.
+
+The third line, **`search provider`**, cannot answer yet. Nothing has been embedded, so `doctor` has no
+chunk to re-embed and reports `not exercised by these checks, so nothing is claimed about it` — which
+is the honest answer on a fresh index, not a failure. **Do not stop on it here.**
+
+Where it does bite is on an index that already has vectors: there, `doctor` re-embeds a sample, and a
+provider that is failing — an expired key shows as a `401` — makes it say so and exit non-zero. Then
+you stop, and you do not register collections that cannot be embedded.
+
+On a fresh index the provider is confirmed one step later, by the embed itself.
 
 ## Register
 
-Two commands per collection, and the first one indexes as it registers:
+One command per collection, and it indexes as it registers. The names are the ones
+`collections_needed` gave you:
 
 ```
 qmd collection add "$(pwd)/.openrecord/decisions/api" \
@@ -95,25 +144,29 @@ qmd collection add "$(pwd)/.openrecord/specs" \
     --name myproject-specs --mask '**/*.md'
 ```
 
-`openrecord qmd status` lists exactly the collection names this project needs, derived from its declared
-components — use that list rather than composing the names yourself:
-
-```
-openrecord qmd status
-→ collections_needed: myproject-decisions-api, myproject-decisions-web,
-                      myproject-decisions-cli, myproject-decisions-root,
-                      myproject-specs
-```
-
 Then embed, once, and confirm nothing is left pending:
 
 ```
 qmd embed
 qmd status        # "Pending: 0 need embedding"
+qmd doctor        # "search provider: answered every call made during these checks"
 ```
 
 A run that ends with documents still pending is the half-built state above. It is not done until that
 number is zero.
+
+## The whole thing, in order
+
+```
+openrecord qmd status                      # usable? which collections?
+$EDITOR ~/.config/qmd/index.yml            # models: embed / generate
+export QMD_OPENAI_API_KEY=... QMD_OPENAI_BASE_URL=...
+qmd doctor                                 # models resolved? (provider: see above)
+qmd collection add <abs path> --name <from collections_needed> --mask '**/*.md'
+qmd embed                                  # this is what proves the provider
+qmd status                                 # Pending: 0
+qmd doctor                                 # search provider: answered every call
+```
 
 ## Re-run it when the components change
 
