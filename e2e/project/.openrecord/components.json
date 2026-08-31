@@ -1,0 +1,29 @@
+{
+  "version": "1",
+  "components": [
+    {
+      "id": "api",
+      "paths": [
+        "src/api"
+      ]
+    },
+    {
+      "id": "cli",
+      "paths": [
+        "src/cli"
+      ]
+    },
+    {
+      "id": "root",
+      "paths": [
+        "."
+      ]
+    },
+    {
+      "id": "web",
+      "paths": [
+        "src/web"
+      ]
+    }
+  ]
+}
