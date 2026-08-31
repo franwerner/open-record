@@ -194,6 +194,21 @@ func TestLevelListsDeclaredComponentsAndFixedTypes(t *testing.T) {
 	if len(entries) != len(SpecTypes) {
 		t.Errorf("spec types = %d entries, want %d (all four exist whether or not they are on disk)", len(entries), len(SpecTypes))
 	}
+	// Counting them is not enough: a listing that advertises a level a reader
+	// cannot open, or one it cannot decide on, is worse than not listing it.
+	for _, entry := range entries {
+		if entry.Description == "" {
+			t.Errorf("%s is listed with no description; the descent decides on descriptions", entry.Path)
+		}
+		coordinate, parseErr := ParseCoordinate(entry.Path)
+		if parseErr != nil {
+			t.Errorf("%s is not a coordinate: %v", entry.Path, parseErr)
+			continue
+		}
+		if _, _, openErr := Level(repo, coordinate); openErr != nil {
+			t.Errorf("%s is advertised as a group but cannot be opened: %v", entry.Path, openErr)
+		}
+	}
 }
 
 func TestLevelMarksGroupsAndRecords(t *testing.T) {

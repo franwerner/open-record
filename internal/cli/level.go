@@ -46,16 +46,25 @@ func runLevelAdd(env Env, args []string) error {
 	name := coordinate.Segments[coordinate.Depth()-1]
 	index := store.Index{Title: *title, Description: *description}
 	source := "given"
-	if entry, known := catalogue.Lookup(name); known {
-		source = "catalogue"
+	// A spec type is defined by the binary, so it has an answer here. A concern
+	// comes from the catalogue. A subgroup has neither, by design.
+	if shipped, known := shippedLevel(coordinate); known {
+		source = shipped.source
 		if index.Title == "" {
-			index.Title = entry.Title
+			index.Title = shipped.title
 		}
 		if index.Description == "" {
-			index.Description = entry.Description
+			index.Description = shipped.description
 		}
 	}
 	if strings.TrimSpace(index.Title) == "" || strings.TrimSpace(index.Description) == "" {
+		if coordinate.Depth() == store.MaxSegments(coordinate.Kind) {
+			// The one level with no default anywhere: what a cluster of records
+			// shares is a judgement about those records, so pointing at a list
+			// of concerns here would be answering a question nobody asked.
+			return Errorf(finding.CodeUsage,
+				"a subgroup is named for whatever its records share, so %q needs --title and --description", name)
+		}
 		return Errorf(finding.CodeUsage,
 			"%q is not in the catalogue, so level add needs --title and --description; the catalogue has %s",
 			name, strings.Join(catalogue.IDs(), ", "))
@@ -70,6 +79,32 @@ func runLevelAdd(env Env, args []string) error {
 		"description": index.Description,
 		"source":      source,
 	})
+}
+
+// shippedLevel is what the binary already knows about a level's name, and where
+// it knows it from. Reported as `source` so a caller can tell prose it supplied
+// from prose it was given.
+func shippedLevel(coordinate store.Coordinate) (struct{ title, description, source string }, bool) {
+	var shipped struct{ title, description, source string }
+	name := coordinate.Segments[coordinate.Depth()-1]
+
+	if coordinate.Kind == store.Specs && coordinate.Depth() == 1 {
+		summary, known := store.SpecTypeSummary(name)
+		if !known {
+			return shipped, false
+		}
+		shipped.title, shipped.description, shipped.source = summary.Title, summary.Description, "shipped"
+		return shipped, true
+	}
+	if coordinate.Kind == store.Decisions && coordinate.Depth() == 2 {
+		concern, known := catalogue.Lookup(name)
+		if !known {
+			return shipped, false
+		}
+		shipped.title, shipped.description, shipped.source = concern.Title, concern.Description, "catalogue"
+		return shipped, true
+	}
+	return shipped, false
 }
 
 // parentExists refuses to create a level whose parent is not there. Under

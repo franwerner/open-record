@@ -47,6 +47,58 @@ var storeSummary = map[Kind]Entry{
 	},
 }
 
+// specTypeSummary is what each of the four types is, shipped with the binary
+// for the same reason storeSummary is: the types are the format, not a
+// project's choice. Without this a project has to invent wording for a thing the
+// binary already defines, and every project invents different wording for the
+// same four types — in the one place the format most wants a shared vocabulary,
+// since these descriptions are what an agent reads to decide where to descend.
+var specTypeSummary = map[string]Entry{
+	"flow": {
+		Title:       "Flow",
+		Description: "An operation facing an actor: someone does something and the system responds. Descend here for the steps of an operation, where it forks, and what an actor is told when it fails.",
+	},
+	"rule": {
+		Title:       "Rule",
+		Description: "A cross-cutting invariant with no flow of its own. Descend here for a limit or a guarantee that holds across several operations rather than inside one.",
+	},
+	"lifecycle": {
+		Title:       "Lifecycle",
+		Description: "An entity's state machine: which states exist and what moves between them. Descend here to find out whether something can still be changed, cancelled or undone.",
+	},
+	"process": {
+		Title:       "Process",
+		Description: "Work triggered by an event rather than by an actor. Descend here for what happens on its own — a webhook arriving, a schedule firing — and what it does when it happens twice.",
+	},
+}
+
+// SpecTypeSummary returns the shipped title and description for a spec type.
+func SpecTypeSummary(name string) (Entry, bool) {
+	summary, known := specTypeSummary[name]
+	return summary, known
+}
+
+// Declared reports whether the store knows a coordinate even with nothing on
+// disk for it.
+//
+// The stores themselves, the declared components and the four spec types all
+// exist by declaration. "Nothing has been filed here yet" and "there is no such
+// place" are different answers, and only the second is a bad coordinate — which
+// is what lets a listing advertise a level a reader can then actually open.
+func Declared(repo string, coordinate Coordinate) bool {
+	switch {
+	case coordinate.IsRoot(), coordinate.Depth() == 0:
+		return true
+	case coordinate.Kind == Specs && coordinate.Depth() == 1:
+		return isSpecType(coordinate.Segments[0])
+	case coordinate.Kind == Decisions && coordinate.Depth() == 1:
+		set, err := LoadComponents(repo)
+		return err == nil && set.Has(coordinate.Segments[0])
+	default:
+		return false
+	}
+}
+
 // Level lists what hangs off a coordinate.
 //
 // Two levels are not read off the disk. The components and the four spec types
@@ -118,6 +170,11 @@ func groupEntry(repo string, coordinate Coordinate) (Entry, []finding.Finding) {
 		Path:  coordinate.String(),
 		Title: coordinate.Segments[len(coordinate.Segments)-1],
 	}
+	if coordinate.Kind == Specs && coordinate.Depth() == 1 {
+		if shipped, known := SpecTypeSummary(coordinate.Segments[0]); known {
+			entry.Title, entry.Description = shipped.Title, shipped.Description
+		}
+	}
 	indexPath := filepath.Join(coordinate.Dir(repo), IndexFile)
 	if _, err := os.Stat(indexPath); err != nil {
 		return entry, nil
@@ -126,7 +183,11 @@ func groupEntry(repo string, coordinate Coordinate) (Entry, []finding.Finding) {
 	if index.Title != "" {
 		entry.Title = index.Title
 	}
-	entry.Description = index.Description
+	// Only when it says something: a project's index overrides the shipped
+	// wording, an unwritten one does not replace it with nothing.
+	if index.Description != "" {
+		entry.Description = index.Description
+	}
 	return entry, findings
 }
 
@@ -135,6 +196,22 @@ func diskLevel(repo string, coordinate Coordinate) ([]Entry, []finding.Finding, 
 	children, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
+			if Declared(repo, coordinate) {
+				// Declared, with nothing filed in it yet. An empty listing is the
+				// true answer, and it is what keeps every group a listing
+				// advertises openable.
+				return []Entry{}, nil, nil
+			}
+			// A search hands back record paths, so feeding one straight back in
+			// is the likeliest mistake there is. Reporting that the path with its
+			// extension stripped does not exist points at a level nobody wrote,
+			// rather than at the file sitting right there.
+			if _, err := os.Stat(dir + ".md"); err == nil {
+				parent := Coordinate{Kind: coordinate.Kind, Segments: coordinate.Segments[:coordinate.Depth()-1]}
+				return nil, nil, finding.Errorf(finding.CodeInvalidCoordinate,
+					"%s.md is a record — open it. The level holding it is %s",
+					coordinate, parent).At(coordinate.String() + ".md")
+			}
 			return nil, nil, finding.Errorf(finding.CodeInvalidCoordinate,
 				"%s does not exist", coordinate).At(coordinate.String())
 		}
@@ -213,7 +290,15 @@ func Walk(repo string, coordinate Coordinate) ([]File, []finding.Finding, error)
 	for _, root := range roots {
 		dir := root.Dir(repo)
 		if _, err := os.Stat(dir); err != nil {
-			continue
+			// A declared level with nothing filed in it is empty, not wrong. A
+			// coordinate nobody declared and nothing created is wrong, and
+			// skipping it silently is what let `validate` report a clean store
+			// for a component somebody had renamed.
+			if Declared(repo, root) {
+				continue
+			}
+			return nil, nil, finding.Errorf(finding.CodeInvalidCoordinate,
+				"%s does not exist", root).At(root.String())
 		}
 		err := filepath.WalkDir(dir, func(full string, entry os.DirEntry, err error) error {
 			if err != nil {
