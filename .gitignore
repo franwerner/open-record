@@ -1,0 +1,8 @@
+# The binary a plain `go build` drops in the root.
+/openrecord
+
+# goreleaser's output.
+/dist/
+
+# A store this repository might grow for its own records.
+.openrecord/
