@@ -173,8 +173,11 @@ There is no approval queue and no third state. Deliberately absent:
   date lies the moment someone edits without updating it. If *when* a decision was taken matters, that
   is context and belongs in the prose.
 - **`component`, `concern`** — carried by the path.
-- **relations (`related`, `supersedes`)** — wikilinks in the body already do this, and a frontmatter
-  list goes stale without anyone noticing.
+- **relations (`related`, `supersedes`)** — a list of other records goes stale without anyone noticing,
+  and it is the one thing in a record that breaks when another one is renamed or moves down a level.
+  Where one record genuinely bears on another, the prose says so in words: nothing is written down that
+  has to be repaired later, and there are already two ways to reach a record — descend with `map`, or
+  find it with `grep`.
 
 ## Body
 
@@ -221,19 +224,8 @@ and nothing in it is machine-checkable.**
   have made drift measurable, but someone has to run those checks, and that someone is not this
   framework.
 
-The consequence is worth stating plainly: `validate` can check that a record is **well-formed** —
-frontmatter present, components declared, wikilinks resolving — and never that it is **still true of
-the code**. Judging whether a decision still holds is reading, not linting.
-
-## Records do not link to each other
-
-A record may **mention** another in prose — *"the shape of that error is fixed by the project's error
-convention"* — and that costs nothing, because no path is written down. What it may not do is write a
-reference to the file.
-
-There are already two ways to reach a record: descend with `map`, or find it with `grep`, whose hits
-are coordinates. A link would be a third way to the same place, and the only one that breaks — the day
-that record is renamed, or a subgroup appears and it moves down a level, every reference to it is
-dangling and something has to notice and fix them.
-
-This holds inside a store and between the two, and it is why no section in either kind carries links.
+The consequence is worth stating plainly: `validate` can check that a record is **well-formed** — its
+frontmatter present and its status one of the two allowed values, the components a spec names actually
+declared, its sections exactly the ones its kind asks for, a branch anchored to a step that exists, a
+scenario carrying all three of its parts — and never that it is **still true of the code**. Judging
+whether a decision still holds is reading, not linting.

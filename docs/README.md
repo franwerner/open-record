@@ -51,7 +51,7 @@ judgement:
 | `openrecord-capture` | Work finished. Decide what the store should say — usually nothing. |
 | `openrecord-bootstrap` | An empty store. Fill it by asking the user, never by inferring. |
 | `openrecord-mine` | Code but no records. Reconstruct candidates; never write. |
-| `setup-record-search` | Once per project, and only with `--with-qmd`. Registers the stores so records can be found by meaning. |
+| `openrecord-setup-search` | Once per project, and only with `--with-qmd`. Registers the stores so records can be found by meaning. |
 
 ## The store
 

@@ -193,9 +193,3 @@ reached or never left. That is a design bug, and today nobody sees it.
 Every section is written in the domain's language plus the public contract — public endpoints, exposed
 error codes. **Never volatile internal identifiers**: classes, methods, database columns, internal
 errors, file paths. The *how* belongs to the code; the *why* belongs to a decision record.
-
-## Records do not link to each other
-
-A spec may mention another record in prose, but never writes a reference to its file. See
-[decision-record.md](decision-record.md#records-do-not-link-to-each-other) — the rule and its reason are
-the same for both kinds, and it holds within a store and across the two.

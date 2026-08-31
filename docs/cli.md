@@ -33,6 +33,7 @@ unavailable. The binary never fails for its absence.
 | `skills` | Emit the bundled agent skills into a directory you name. |
 | `concerns` | Print the concerns catalogue. |
 | `qmd` | Report on semantic search, and install it. |
+| `version` | Print the build, and the store format it understands. |
 
 **There is no `init`.** The first `component add` creates everything the store needs, so a command
 whose only job is writing an empty file earns nothing.
@@ -72,8 +73,17 @@ openrecord map --for specs/flow           → subgroups and loose capabilities
 openrecord map --for specs/flow/checkout  → the subgroup's capabilities
 ```
 
-This is also what makes search and navigation speak the same language: a `grep` hit comes back as
-`decisions/api/data/queries.md`, which **is** a `map` coordinate.
+This is also what makes search and navigation speak the same language. A `grep` hit comes back as
+`decisions/api/data/queries.md` — a path in the same vocabulary, but a **file**, not a level. Open it;
+the coordinate to descend into is its parent, `decisions/api/data`. Handing the hit itself to `map` is
+the obvious next move and the command says so rather than reporting that a path nobody wrote is
+missing:
+
+```
+openrecord map --for decisions/api/data/queries.md
+→ decisions/api/data/queries.md is a record — open it.
+  The level holding it is decisions/api/data
+```
 
 ### What a level returns
 
@@ -175,13 +185,26 @@ decisions, never by two sets at once.
 ### `component owners`
 
 Resolves a repository path to the component that owns it. This is the bridge from the repo into the
-store: an agent knows which files it is about to touch, and this turns that into a coordinate `map` can
-navigate.
+store: an agent knows which files it is about to touch, and this turns that into somewhere to start
+reading.
 
 ```
-openrecord component owners src/api/handlers/user.go   → api
-openrecord map --for decisions/api                     → and the descent begins
+openrecord component owners src/api/handlers/user.go
+→ owner: api
+  map:   decisions/api
+  specs: specs/flow/checkout/place-an-order.md
+         specs/rule/usage-limits.md
 ```
+
+**It answers both halves, and they are found differently.** `map` is the coordinate where this
+surface's decisions are filed — a decision is closed inside one component, so it resolves from the
+path. `specs` is every capability that declares this surface, which cannot be resolved from a path at
+all: a capability crosses surfaces and names them in its frontmatter instead of living under one, so it
+has to be looked up from the other end.
+
+A path no surface claims reports `owner: null` alongside what *is* declared, and no specs — they are
+reached through the owner, and there is no owner. Reported rather than defaulted, because a file
+outside every declared surface is exactly what a scope check needs to see.
 
 ---
 
@@ -192,9 +215,23 @@ every one of them has to declare when a reader should descend into it, and that 
 whole reason the level exists.
 
 ```
-openrecord level add decisions/api/security
+openrecord level add decisions/api/security                              → from the catalogue
+openrecord level add specs/flow                                          → from the binary
 openrecord level add decisions/api/our-own-thing --title "…" --description "…"
+openrecord level add specs/flow/checkout       --title "…" --description "…"
 ```
+
+**Three cases, and the reply says which one it was** in its `source` field:
+
+| Level | Where its prose comes from | `source` |
+| --- | --- | --- |
+| A concern the catalogue knows | The shipped catalogue | `catalogue` |
+| One of the four spec types | The binary — the types are the format, not a project's choice | `shipped` |
+| A concern the catalogue does not have, or **any subgroup** | You, via `--title` and `--description` | `given` |
+
+A subgroup never has a default and never will: it is named for whatever its records share, and that is
+a judgement about those records. The refusal says so rather than listing the concerns, which are a
+different axis and not what was being named.
 
 **The catalogue supplies the default description.** When the name matches one of the shipped concerns,
 the command takes its title and description rather than asking. This is the one mechanical use the
@@ -321,7 +358,18 @@ CLI:
 
 ```
 openrecord grep "rate limit" --for decisions/api
+→ decisions/api/security/rate-limits/at-the-gateway.md  [record]  line 12, 6 hits
+  decisions/api/security/INDEX.md                       [group]   line 3,  1 hit
 ```
+
+### One entry per file, not per line
+
+A record that says the term six times is still one record, and one thing to go and read. Reporting a
+hit per line would make anything counting results over-count by however many times the wording happened
+to repeat, and leave the same deduplication to every caller separately.
+
+So each file appears once, carrying the first matching line as the evidence and `hits` as the weight —
+which is what separates *mentioned once in passing* from *this is what the record is about*.
 
 ### Indexes are searched too
 
@@ -398,10 +446,10 @@ which is better than deleting on the strength of something we cannot trust.
 Semantic search is optional, so what gets emitted depends on whether the project wants it.
 
 Without the flag, the skills come out with **no mention of `qmd` anywhere**, and
-`setup-record-search` is not emitted at all. An agent should never read about a tool the project does
+`openrecord-setup-search` is not emitted at all. An agent should never read about a tool the project does
 not have — that is how you get it trying to run something that is not installed.
 
-With the flag, the semantic step appears in `openrecord-consult` and `setup-record-search` comes along.
+With the flag, the semantic step appears in `openrecord-consult` and `openrecord-setup-search` comes along.
 
 **The command only offers; the person installing decides.** No interactive prompt — that would break
 piping and be useless in CI.
@@ -460,8 +508,24 @@ openrecord qmd status
 openrecord qmd install
 ```
 
-**`status`** reports whether `qmd` is on the PATH, its version, and **the collections this project
-needs** — one per component for decisions, one for specs.
+**`status`** reports whether `qmd` is on the PATH, whether it **runs**, its version against the one
+openrecord pins, and **the collections this project needs** — one per component for decisions, one for
+specs.
+
+*Present* and *usable* are separate answers because present-and-broken is a real state and a common
+one: a qmd whose native database bindings are missing answers `--version` and dies on every command
+that opens the index. `--version` is therefore the one question that proves nothing, so `status` also
+runs a command that opens the index, and reports what it said when it failed:
+
+```
+openrecord qmd status
+→ installed: true
+  usable:    false
+  version:   qmd 2.5.3     pinned_version: 2.8.3-mate.4
+  trouble:   Error: Could not locate the bindings file.
+  note:      on the PATH but it does not run, so every search will fail —
+             reinstall with `openrecord qmd install --force`
+```
 
 It does not check whether those collections are registered. That lives in qmd's configuration, in
 qmd's format, and reading it would break the day that format changes. openrecord says what
@@ -470,6 +534,20 @@ registration is required; performing it is qmd's business.
 **`install`** installs it, and says what to do next. It refuses early and clearly when npm is absent,
 rather than surfacing whatever npm prints when it is not there, and it streams the build — installing
 from source is slow enough that silence reads as a hang.
+
+**Three states, and only one of them declines.** Presence is not the question: a qmd on the PATH that
+does not run would otherwise leave a caller with no way forward through openrecord's own commands.
+
+| What is there | What `install` does |
+| --- | --- |
+| Nothing | Installs. |
+| A qmd that does not run | Installs, without being asked twice — that is what the command is for. |
+| A working qmd, pinned version | Nothing, and says so. |
+| A working qmd, some other version | **Nothing**, and reports the mismatch. Replacing something that works is the caller's call, so it takes `--force`. |
+
+The pinned version is named in two places — the binary and `scripts/install.sh` — and a test fails if
+they drift, because nothing else would notice: the script would install one version while the binary
+reported a mismatch against the other.
 
 ### Installing it later means reconciling
 
@@ -485,7 +563,25 @@ The emit manifest records which variant was written, so the mismatch is reported
 | no flag, previously emitted with it | *these skills previously included the passages and no longer do* |
 
 **Re-emitting is what reconciles.** `--with-qmd` turns the stripped passages back into `updated` files
-and brings `setup-record-search` along; dropping the flag removes it again.
+and brings `openrecord-setup-search` along; dropping the flag removes it again.
 
 **The report never changes what is emitted.** Deciding by what happens to be installed would make the
 same command produce different files on different machines, which is worse than the problem it solves.
+
+---
+
+## `version`
+
+Prints what this build is and, more usefully, **which store format it understands**.
+
+```
+openrecord version
+→ { "version": "0.1.0", "commit": "847a465", "date": "2026-08-31T15:19:05Z", "store_format": "1" }
+```
+
+The format is the field that matters. A store records the format it was written in, and a build reading
+one it does not understand fails loudly rather than misreading it — so when that happens, this is the
+command that says which side is out of date.
+
+The version, commit and date are stamped in at build time. A binary built without them reports `dev`
+and `unknown`, which is how a local build is told apart from a released one.
