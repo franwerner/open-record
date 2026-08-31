@@ -33,6 +33,28 @@ Present them ordered by how strong the evidence is, each one anchored to what it
 candidate, from these files, because of this*. A candidate a reader cannot trace back is one they have
 to take on faith, and this is exactly the material that should not be taken on faith.
 
+### The anchor is for the gate, never for the record
+
+That file and line belong to the **presentation** — they let somebody confirming a candidate go and
+check it. They must not end up in the record you write once they confirm it.
+
+A record's prose never names a class, a method, a column, an internal error or a **file path**: there
+is no anchor section to put one in, and a record that names one dies at the next rename, silently,
+while still reading as true. This bites hardest here of anywhere, because mining means reading files
+all day and the path is right there in your hand.
+
+| In the candidate you show ✅ | In the record you write ✅ |
+| --- | --- |
+| *from `internal/store/postgres.go:1-7`* | *persistence is hand-written SQL owned by one layer* |
+| *the package comment on `bank.go` says…* | *provider errors are translated at the adapter boundary* |
+
+Names that survive are the ones an external consumer would use too: a technology, a public endpoint, a
+contract header, an exposed error code. Quoting a comment is still quoting — attribute it as *the
+package comment that owns this* rather than by its path.
+
+Nothing checks this. `validate` reads structure, not prose, so a record full of paths passes every
+check and rots on the first rename.
+
 ## What counts as evidence of a decision
 
 Not every pattern is a decision. Look for **deliberateness**:
