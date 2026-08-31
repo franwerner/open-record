@@ -45,7 +45,7 @@ all day and the path is right there in your hand.
 
 | In the candidate you show ✅ | In the record you write ✅ |
 | --- | --- |
-| *from `internal/store/postgres.go:1-7`* | *persistence is hand-written SQL owned by one layer* |
+| *from `src/store/postgres.go:1-7`* | *persistence is hand-written SQL owned by one layer* |
 | *the package comment on `bank.go` says…* | *provider errors are translated at the adapter boundary* |
 
 Names that survive are the ones an external consumer would use too: a technology, a public endpoint, a
