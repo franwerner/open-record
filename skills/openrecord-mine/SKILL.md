@@ -38,10 +38,14 @@ to take on faith, and this is exactly the material that should not be taken on f
 That file and line belong to the **presentation** — they let somebody confirming a candidate go and
 check it. They must not end up in the record you write once they confirm it.
 
-A record's prose never names a class, a method, a column, an internal error or a **file path**: there
-is no anchor section to put one in, and a record that names one dies at the next rename, silently,
-while still reading as true. This bites hardest here of anywhere, because mining means reading files
-all day and the path is right there in your hand.
+A record never names a class, a method, a column, an internal error or a **file path** — not in its
+body, and **least of all in its `description`**. There is no anchor section to put one in, and a record
+that names one dies at the next rename, silently, while still reading as true. This bites hardest here
+of anywhere, because mining means reading files all day and the path is right there in your hand.
+
+The description is the worst place for one: it is what a generated listing shows, so it is what a
+reader sees *before* deciding whether to open the file. A path that has rotted there misleads people
+who never open the record at all.
 
 | In the candidate you show ✅ | In the record you write ✅ |
 | --- | --- |
@@ -54,6 +58,24 @@ package comment that owns this* rather than by its path.
 
 Nothing checks this. `validate` reads structure, not prose, so a record full of paths passes every
 check and rots on the first rename.
+
+### A section with nothing in it is deleted, not filled
+
+Thin evidence is the normal case when mining, and it produces a specific mistake: writing *"None
+recorded."* or *"Not applicable"* under a heading rather than removing the heading.
+
+An empty section reads as **nobody wrote this yet**. An absent one reads as **this does not apply
+here**. Those are different facts, and when the whole point of a mined record is to be honest about
+what is and is not known, saying the wrong one undoes the honesty everywhere else in the file.
+
+So: a spec type's sections are optional. If a flow has no branches, delete `## Branches` — do not
+leave it holding a placeholder. `validate` will not catch this, because the section is *allowed* for
+that type; it simply has nothing in it.
+
+The exception is a gap worth naming. *"What happens when a key already seen arrives again is not
+recorded anywhere"* is content — it says something true about the system and about the evidence, and
+it belongs under `## Edge cases` as prose. The test is whether the sentence carries a fact: **"we do
+not know what happens here" is a finding; "there is nothing to say" is an empty section.**
 
 ## What counts as evidence of a decision
 
