@@ -151,3 +151,31 @@ func TestRecordChecksComponentsAgainstTheDeclaration(t *testing.T) {
 		t.Error("a typo in components was accepted; it would silently stop matching forever")
 	}
 }
+
+// The split between what a write checks and what validate checks is currently
+// only implied by which function calls which. Stated here, because a caller
+// reading `"warnings": []` on a write takes it to mean the store is clean.
+func TestARecordCheckNeverReportsOnTheStore(t *testing.T) {
+	declared := store.Components{
+		Version:    store.Format,
+		Components: []store.Component{{ID: "api", Paths: []string{"src/api"}}},
+	}
+	raw := []byte("---\ntitle: t\ndescription: d\nstatus: accepted\n---\n\n" +
+		"## Context\n\nx\n\n## Decision\n\nx\n\n## Alternatives\n\nx\n\n## Consequences\n\nx\n")
+	coordinate := store.Coordinate{Kind: store.Decisions, Segments: []string{"api", "security"}}
+
+	// Only findings about the store as a whole are listed: a record check may
+	// legitimately produce any of the others.
+	storeWide := map[string]bool{
+		finding.CodeConcernTooFlat:       true,
+		finding.CodeComponentPathMissing: true,
+		finding.CodeOrphanComponent:      true,
+		finding.CodeComponentDuplicate:   true,
+		finding.CodeComponentNoPaths:     true,
+	}
+	for _, item := range Record(raw, coordinate, declared, "decisions/api/security/x.md") {
+		if storeWide[item.Code] {
+			t.Errorf("a record check reported %s, which is about the store, not this record", item.Code)
+		}
+	}
+}
