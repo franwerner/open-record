@@ -10,13 +10,25 @@ import (
 	"github.com/franwerner/openrecord/internal/store"
 )
 
-// Match is one literal hit. Kind travels with it because an index hit and a
-// record hit are different instructions: descend here, versus open this.
+// Match is one file the term was found in — not one line.
+//
+// A record that says the term six times is still one record, and one thing to
+// go and read. Reporting a hit per line made a caller counting results to gauge
+// coverage over-count by however many times the wording happened to repeat, and
+// left the deduplication to every caller separately.
+//
+// Kind travels with it because an index hit and a record hit are different
+// instructions: descend here, versus open this.
 type Match struct {
 	Path string          `json:"path"`
 	Kind store.EntryKind `json:"kind"`
-	Line int             `json:"line"`
-	Text string          `json:"text"`
+	// Line and Text are the first hit in the file: enough to see why it matched
+	// without opening it.
+	Line int    `json:"line"`
+	Text string `json:"text"`
+	// Hits is how many lines matched, so "mentioned once in passing" and "this
+	// is what the record is about" are still distinguishable.
+	Hits int `json:"hits"`
 }
 
 type grepReport struct {
@@ -55,15 +67,20 @@ func runGrep(env Env, args []string) error {
 		if err != nil {
 			return err
 		}
+		if len(found) == 0 {
+			continue
+		}
 		kind := store.EntryRecord
 		if file.IsIndex {
 			kind = store.EntryGroup
 		}
-		for _, match := range found {
-			match.Path = file.Path
-			match.Kind = kind
-			matches = append(matches, match)
-		}
+		// One entry per file, carrying the first line as the evidence and the
+		// count as the weight.
+		first := found[0]
+		first.Path = file.Path
+		first.Kind = kind
+		first.Hits = len(found)
+		matches = append(matches, first)
 	}
 	return env.WriteJSON(grepReport{Term: term, For: coordinate.String(), Matches: matches})
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -222,9 +223,34 @@ func TestGrepSeparatesIndexHitsFromRecordHits(t *testing.T) {
 	if indexHits == 0 {
 		t.Error("no index hit; indexes are searched here")
 	}
+	// ParseCoordinate checks syntax and nothing else, so on its own it cannot
+	// falsify the claim it is here to check: a hit path parses happily and then
+	// resolves to no directory. What is asserted is the round trip a reader
+	// actually performs — the level holding the hit is one `map` opens.
 	for _, match := range report.Matches {
 		if _, err := store.ParseCoordinate(match.Path); err != nil {
-			t.Errorf("a hit path is not a map coordinate: %q (%v)", match.Path, err)
+			t.Errorf("a hit path is not a coordinate: %q (%v)", match.Path, err)
+			continue
+		}
+		parent := path.Dir(match.Path)
+		coordinate, err := store.ParseCoordinate(parent)
+		if err != nil {
+			t.Errorf("the level holding %s is not a coordinate: %v", match.Path, err)
+			continue
+		}
+		if _, _, err := store.Level(repo, coordinate); err != nil {
+			t.Errorf("the level holding %s cannot be opened (--for %s): %v", match.Path, parent, err)
+		}
+	}
+
+	// One entry per file, however many lines matched.
+	seen := map[string]int{}
+	for _, match := range report.Matches {
+		seen[match.Path]++
+	}
+	for hit, count := range seen {
+		if count > 1 {
+			t.Errorf("%s appears %d times; a hit is a record, not a line", hit, count)
 		}
 	}
 }
