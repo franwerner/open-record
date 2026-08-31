@@ -169,7 +169,8 @@ func TestSkillsInvokeQmdCommandsThatExist(t *testing.T) {
 	known := map[string]bool{
 		"query": true, "search": true, "vsearch": true, "get": true, "multi-get": true,
 		"collection": true, "context": true, "ls": true, "init": true, "status": true,
-		"update": true, "embed": true, "cleanup": true, "doctor": true, "mcp": true,
+		"update": true, "embed": true, "pull": true, "cleanup": true, "doctor": true,
+		"mcp": true,
 	}
 	invocation := regexp.MustCompile(`^qmd ([a-z-]+)`)
 

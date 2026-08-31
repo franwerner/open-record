@@ -72,8 +72,26 @@ announces the gap. Which is why every step below comes before the first `collect
 
 **A fresh qmd is not configured for a hosted provider.** It starts on local models it has not
 downloaded, so an install that looks fine fails at the first embed with *"Failed to get embedding
-dimensions from first chunk"*. There are two ways out and they are both qmd's, not openrecord's: pull
-the local models, or point it at a hosted API. The second is what the rest of this describes.
+dimensions from first chunk"*.
+
+### Which provider is the user's call, not yours
+
+There are two shapes — local models that qmd downloads and runs, or a hosted API it calls — and
+choosing between them is a decision about somebody's machine, their money and their data:
+
+- **Local** costs disk and a download, runs on their CPU or GPU, and sends nothing anywhere.
+- **Hosted** answers faster on modest hardware, costs per call, and means every record they index is
+  sent to whichever endpoint they name.
+
+That last part settles it: **ask.** Sending a project's decisions to a third party is not something to
+arrange on somebody's behalf because it was the quicker path. Ask which they want, and for a hosted
+one, which endpoint and which models. If they have no preference, say what the trade-off is and let
+them pick.
+
+**Everything below is one worked example**, with the names of a hosted OpenAI-compatible setup filled
+in. Read the shape, not the values: the model names, the endpoint and the variable holding the key are
+whatever the user's provider calls them. What is *not* an example is the ordering and the precedence —
+those are how qmd behaves and they hold whatever is chosen.
 
 **1. Is qmd there, does it run, and which collections does this project need?**
 
@@ -85,7 +103,8 @@ openrecord qmd status
 `openrecord qmd install --force` before anything else. `collections_needed` is the list to register
 below; take the names from there rather than composing them.
 
-**2. Point qmd at the provider.** The models go in its index config, `~/.config/qmd/index.yml`:
+**2. Point qmd at what the user chose.** The models go in its index config, `~/.config/qmd/index.yml` —
+these two values being an example of the shape, not a recommendation:
 
 ```yaml
 models:
@@ -97,15 +116,19 @@ models:
 model, and `collection add` writes the local defaults into it — so a model set only by environment
 variable stops taking effect the moment the first collection is registered, silently. Set it in the
 file. Writing it before registering is safe: `collection add` fills in what is missing and leaves what
-is there.
+is there. This part is qmd's behaviour, not a preference: it holds for local models too.
 
 **3. Put the credentials in the environment** — **never in a file that gets committed.** A store is
-versioned and shared; a key in it is a key published.
+versioned and shared; a key in it is a key published. A local setup needs none of this and skips to 4.
 
 ```
 export QMD_OPENAI_API_KEY=...
-export QMD_OPENAI_BASE_URL=https://openrouter.ai/api/v1   # or whichever endpoint
+export QMD_OPENAI_BASE_URL=https://openrouter.ai/api/v1
 ```
+
+Again the shape, not the values: the endpoint is the user's, and the variable names are the ones qmd
+reads for an OpenAI-compatible provider. A different kind of backend reads different ones — that is
+qmd's documentation to answer, not this skill's.
 
 **4. Confirm it before spending a registration on it.**
 
@@ -115,9 +138,11 @@ qmd doctor
 
 Two lines say whether the configuration took:
 
-- **`model cache: missing`** naming `hf:` models — qmd is still on the local ones, so the config above
-  is not being read. Fix that before going on. The same line naming your *hosted* models is expected
-  and not a problem: they are not files, so there is nothing to cache.
+- **`model cache: missing`** — read it against what was chosen. Naming **local** models: they have to
+  be downloaded, so run `qmd pull` before going on. Naming **hosted** models: expected and not a
+  problem, since those are not files and there is nothing to cache. Naming models **nobody chose** —
+  qmd's own defaults, when a hosted provider was the choice — means the config above is not being
+  read, and that is what to fix.
 - **`QMD_EMBED_MODEL is set to X but index config uses Y`** — the file is winning, as it should. Fix
   the file.
 
@@ -157,10 +182,15 @@ number is zero.
 
 ## The whole thing, in order
 
+The **order** is the part that generalises. What goes in steps 2 and 3 is whatever the user chose, and
+the credential line is only there for a hosted provider.
+
 ```
+ask                                        # local models, or a hosted API? which?
 openrecord qmd status                      # usable? which collections?
-$EDITOR ~/.config/qmd/index.yml            # models: embed / generate
-export QMD_OPENAI_API_KEY=... QMD_OPENAI_BASE_URL=...
+$EDITOR ~/.config/qmd/index.yml            # models: embed / generate — theirs
+export <the variables their provider needs>
+qmd pull                                   # local models only
 qmd doctor                                 # models resolved? (provider: see above)
 qmd collection add <abs path> --name <from collections_needed> --mask '**/*.md'
 qmd embed                                  # this is what proves the provider
