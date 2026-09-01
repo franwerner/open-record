@@ -317,6 +317,58 @@ The three levels below find different things. The third found what the first two
 `e2e/` in this repository drives the built binary against a realistic project and is the automated
 half of this. It is not a substitute for the two above: it runs as whoever is developing.
 
+#### The harness, and the user it reuses
+
+`e2e/asuser/` is that test, written down so it can be re-run rather than reconstructed. Two scripts:
+`run-as-new-user.sh` creates the user and drives everything as them; `e2e.sh` is the walk itself, 57
+checks over install, the store, refusals, navigation, skills, diagrams and search.
+
+**Reuse the same user: `ordtest`.** The harness creates it if it is missing and reuses it if it is
+there, so iterating costs nothing. Recreating it from scratch is a deliberate act, and worth doing
+whenever the thing under test is the *install* — a user who already has openrecord cannot tell you
+whether installing it works:
+
+```sh
+sudo userdel -r ordtest        # then run the harness again
+```
+
+Two modes, and they answer different questions:
+
+```sh
+# the published release — what a user gets today
+sudo bash e2e/asuser/run-as-new-user.sh
+
+# the working tree — what a user would get if you released now
+sudo BUILD_LOCAL=yes bash e2e/asuser/run-as-new-user.sh
+```
+
+`BUILD_LOCAL=yes` builds from this checkout, installs the binary into the test user, and asserts it is
+running the commit that is on `HEAD`. **Use it before tagging.** The skills are compiled into the
+binary, so it is the only way to see whether an unreleased change to them actually reaches somebody —
+correct prose in `skills/` proves nothing about what is emitted. The run leaves its log at
+`/tmp/ordtest-e2e.log`.
+
+#### Credentials
+
+They are **not in this repository, and must not be put here** — it is public, and a secret committed to
+it is a secret published, permanently, in the history. That is the same rule
+`openrecord-setup-search` states about a store.
+
+The harness reads them from `~/.config/openrecord-testing/env`, mode `600`, holding:
+
+| Variable | What it is for |
+| --- | --- |
+| `SUDO_PASSWORD` | Creating and removing the test user. |
+| `QMD_OPENAI_API_KEY` | The embedding provider, for section 7. |
+| `QMD_OPENAI_BASE_URL` | Its endpoint. |
+
+Override the location with `OPENRECORD_TESTING_ENV=/path/to/env`. If the file is missing, the harness
+says so and stops rather than running a half-configured pass.
+
+Whoever is driving this needs the sudo password to create the user. Ask for it; do not write it down
+here. And treat the embedding key as disposable: it is spent against a third-party API by every run, so
+rotate it when the testing is done.
+
 ### 8.3 An agent, given nothing but the skills
 
 - [ ] **[manual]** Point a fresh agent at a project with the skills emitted and a task in a user's
