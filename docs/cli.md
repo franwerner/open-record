@@ -549,6 +549,23 @@ The pinned version is named in two places — the binary and `scripts/install.sh
 they drift, because nothing else would notice: the script would install one version while the binary
 reported a mismatch against the other.
 
+### Why a pinned release and not the latest one
+
+The install URL names one release's asset — `.../download/v<version>/tobilu-qmd-<version>.tgz` — rather
+than `releases/latest/download/`, which would install whatever qmd published most recently. Following
+latest asks four things of qmd, and three of them are already true: an asset whose name does not carry
+the version, so the URL survives a release (the fork publishes `qmd.tgz` next to the versioned one); a
+release GitHub itself counts as latest, which one marked prerelease is not, and a `-mate.N` suffix makes
+that easy to get wrong; and a tarball npm installs without running a build, which is why the URL points
+at a tarball and not at the git repository — npm runs a git dependency's `prepare`, and the build dies
+where there is no compiler.
+
+The fourth is the one not on offer: a stable contract. Unpinned, every release reaches every machine
+without anyone reading it first, and openrecord depends on `status`, `--version` and the collection
+commands keeping their shape. The pin is also what `status` compares against — `pinned_version` is a
+claim about which qmd this openrecord was built for, and there is no such claim left to make if the
+answer is always whichever one is newest.
+
 ### Installing it later means reconciling
 
 Skills already emitted describe a smaller tool than the one now present. Nothing else would notice:
