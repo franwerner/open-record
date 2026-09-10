@@ -19,11 +19,11 @@ CREDS="${OPENRECORD_TESTING_ENV:-${SUDO_USER:+/home/$SUDO_USER}/.config/openreco
 [ -r "$CREDS" ] || { echo "no encuentro las credenciales en $CREDS — ver TESTING.md" >&2; exit 1; }
 
 if id "$USER_NAME" >/dev/null 2>&1; then
-  echo "==> el usuario $USER_NAME ya existe, lo reuso"
-else
-  echo "==> creando usuario $USER_NAME"
-  useradd --create-home --shell /bin/bash "$USER_NAME"
+  echo "==> el usuario $USER_NAME ya existe, lo recreo"
+  userdel -r "$USER_NAME" || { echo "==> no pude borrar $USER_NAME (ver el mensaje de arriba — si la cuenta quedó borrada pero el home vivo, hay que limpiarlo a mano antes de reintentar)" >&2; exit 1; }
 fi
+echo "==> creando usuario $USER_NAME"
+useradd --create-home --shell /bin/bash "$USER_NAME"
 
 HOME_DIR="$(getent passwd "$USER_NAME" | cut -d: -f6)"
 

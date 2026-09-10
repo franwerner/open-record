@@ -23,6 +23,42 @@ check() { # check <got> <want> <label>
 # under pipefail, which is what produced a phantom 141 last time)
 rc() { "$@" >/dev/null 2>&1; echo $?; }
 
+# Guardia de parseo JSON, en dos entradas sobre un mismo cuerpo. Ninguna de las
+# dos toca ok/bad — check "$(...)" corre en una subshell, así que un contador
+# tocado ahí adentro se pierde al volver. En cambio se reporta por valor: la
+# diagnosis va a STDERR (y ya está impresa cuando check corre, porque la
+# substitución de comandos termina antes) y $JBAD sale por STDOUT, que nunca
+# coincide con un valor esperado — así el check que lo envuelve es el que falla.
+JBAD='<sin json — el error va arriba>'   # sentinela: nunca coincide con un valor esperado
+JERR="$HOME/.jerr"                        # el stderr de la última invocación de jval
+
+jstr() { # jstr <expr> <texto>: parsea <texto> como JSON en `d` y corre <expr>.
+  local expr="$1" text="$2" out
+  if out="$(printf '%s' "$text" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+$expr
+" 2>/dev/null)"; then
+    printf '%s' "$out"
+  else
+    printf '%s\n' "$text" >&2
+    printf '%s' "$JBAD"
+  fi
+}
+
+jval() { # jval <expr> <cmd...>: corre <cmd> con stdout capturado y stderr en $JERR.
+  local expr="$1"; shift
+  local out code
+  out="$("$@" 2>"$JERR")"; code=$?
+  if [ "$code" -ne 0 ]; then
+    printf 'exit %s\n%s\n' "$code" "$out" >&2
+    cat "$JERR" >&2
+    printf '%s' "$JBAD"
+  else
+    jstr "$expr" "$out"
+  fi
+}
+
 step "0. Punto de partida"
 note "usuario: $(id -un)  ·  HOME: $HOME"
 if [ "${BUILD_LOCAL:-no}" = "yes" ]; then
@@ -38,26 +74,31 @@ check "$(ls "$HOME"/.npm-global/bin/qmd "$HOME"/.local/bin/qmd 2>/dev/null | wc 
 check "$(ls -d "$HOME/.config/qmd" 2>/dev/null || echo nada)" "nada" "no hay config de qmd"
 
 if [ "${BUILD_LOCAL:-no}" = "yes" ]; then
-  step "1. Binario compilado del working tree (sin release)"
+  # El instalador del working tree, contra el release que el arnés armó al lado:
+  # BASE_URL y VERSION vienen del entorno, y son lo único que cambia respecto de
+  # lo que corre un usuario.
+  step "1. Instalación del working tree, por su propio instalador"
+  WITH_QMD=no bash "$HOME/install.sh" 2>&1 | sed 's/^/    /'
   hash -r
+  check "$(rc command -v openrecord)" "0" "el instalador dejó el binario en el PATH"
   note "$(openrecord version | tr -d '\n ')"
-  check "$(openrecord version | python3 -c 'import json,sys;print(json.load(sys.stdin)["commit"])')" \
+  check "$(jval 'print(d["commit"])' openrecord version)" \
         "${EXPECT_COMMIT}" "corre el commit que está en master ahora"
 else
   step "1. Instalación por la vía publicada"
   curl -fsSL https://raw.githubusercontent.com/franwerner/open-record/master/scripts/install.sh | WITH_QMD=no bash 2>&1 | sed 's/^/    /'
   hash -r
-  check "$(openrecord version | python3 -c 'import json,sys;print(json.load(sys.stdin)["version"])')" "0.2.0" "instaló v0.2.0"
+  check "$(jval 'print(d["version"])' openrecord version)" "0.2.0" "instaló v0.2.0"
 fi
-check "$(openrecord version | python3 -c 'import json,sys;print(json.load(sys.stdin)["store_format"])')" "1" "formato de store 1"
+check "$(jval 'print(d["store_format"])' openrecord version)" "1" "formato de store 1"
 
 step "2. qmd, por la ruta que ofrece openrecord"
 npm config set prefix "$HOME/.npm-global" >/dev/null 2>&1
 openrecord qmd install >/dev/null 2>&1; hash -r
-st() { openrecord qmd status | python3 -c "import json,sys;print(json.load(sys.stdin)[\"$1\"])"; }
+st() { jval "print(d[\"$1\"])" openrecord qmd status; }
 check "$(st installed)" "True" "installed"
 check "$(st usable)"    "True" "usable — corre, no solo está"
-check "$(openrecord qmd status | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["pinned_version"] in d["version"])')" "True" "es la versión que openrecord fija"
+check "$(jval 'print(d["pinned_version"] in d["version"])' openrecord qmd status)" "True" "es la versión que openrecord fija"
 
 step "3. Proyecto y superficies"
 mkdir -p "$W/src/api" "$W/src/worker" && cd "$W"
@@ -76,16 +117,16 @@ PY
 git init -q . && git add -A && git -c user.email=a@b -c user.name=t commit -q -m init
 openrecord component add api    --path src/api    --title "API"    --description "The HTTP surface. Descend here if you touch an endpoint or what a client is told." >/dev/null
 openrecord component add worker --path src/worker --title "Worker" --description "Scheduled work. Descend here if you touch what runs on its own." >/dev/null
-check "$(openrecord map --for decisions | python3 -c 'import json,sys;print(",".join(e["path"] for e in json.load(sys.stdin)["entries"]))')" \
+check "$(jval 'print(",".join(e["path"] for e in d["entries"]))' openrecord map --for decisions)" \
       "decisions/api,decisions/worker" "las dos superficies quedaron declaradas"
 
 step "4. Niveles: de dónde sale la prosa de cada uno"
-src() { openrecord level add "$1" ${2:+--title "$2"} ${3:+--description "$3"} | python3 -c 'import json,sys;print(json.load(sys.stdin)["source"])'; }
+src() { jval 'print(d["source"])' openrecord level add "$1" ${2:+--title "$2"} ${3:+--description "$3"}; }
 check "$(src decisions/api/security)" "catalogue" "una concern la trae el catálogo"
 check "$(src specs/flow)"             "shipped"   "un tipo de spec lo trae el binario"
 check "$(src specs/rule)"             "shipped"   "y el otro también"
 check "$(rc openrecord level add specs/flow/checkout)" "1" "un subgrupo sin prosa se rechaza"
-check "$(openrecord level add specs/flow/checkout 2>&1 | python3 -c 'import json,sys;print("subgroup" in json.load(sys.stdin)["message"])')" \
+check "$(jstr 'print("subgroup" in d["message"])' "$(openrecord level add specs/flow/checkout 2>&1)")" \
       "True" "y el rechazo habla de subgrupos, no del catálogo"
 
 step "5. Escribir, y verificar lo que quedó escrito"
@@ -128,6 +169,38 @@ PY
 )" "True" "el cuerpo en disco es exactamente el que se pasó"
 check "$(grep -c '^title: Writes require an idempotency key$' "$written")" "1" "el título quedó en el frontmatter"
 
+# El worker también necesita un record propio — es la superficie que responde
+# "qué corre trabajo que nadie disparó" en el paso 11. openrecord no deja
+# escribir un decision directo bajo un componente: hace falta una concern.
+openrecord level add decisions/worker/runtime >/dev/null
+cat > "$HOME/worker.md" <<'BODY'
+## Context
+
+Work that no request triggers still has to run somehow: nothing calls this service to ask for it, so
+something in it has to run that work on its own.
+
+## Decision
+
+Jobs run in-process on a schedule, inside the same process that serves requests, rather than through a
+separate queue or a dedicated worker fleet.
+
+## Alternatives
+
+- **A message queue with dedicated workers.** Rejected: it buys at-least-once delivery under a crash, a
+  guarantee this service already has for free — there is one instance and every job is idempotent.
+- **A cron job outside the process, calling back in.** Rejected: it adds a second deployable that has to
+  stay in sync with the code it schedules, for no guarantee the in-process scheduler doesn't already give.
+
+## Consequences
+
+A single instance is the whole story: if it is down, scheduled work does not run until it comes back.
+Idempotency is what makes an in-process retry safe, so any job added later has to keep that property.
+BODY
+openrecord record write decisions/worker/runtime/scheduled-in-process-jobs.md \
+  --title "Jobs run in-process on a schedule, not through a queue" \
+  --description "Jobs run in-process on a schedule rather than through a queue; there is one instance and the work is idempotent." \
+  --status accepted --body-file "$HOME/worker.md" >/dev/null
+
 cat > "$HOME/spec.md" <<'BODY'
 ## Purpose
 
@@ -158,7 +231,7 @@ openrecord record write specs/rule/idempotent-writes.md \
   --title "Idempotent writes" \
   --description "Writes require an Idempotency-Key; a request without one is refused with 400, and a repeated key returns the original outcome without charging again." \
   --status accepted --components api --body-file "$HOME/spec.md" >/dev/null
-check "$(openrecord map --for specs/rule | python3 -c 'import json,sys;e=json.load(sys.stdin)["entries"][0];print(",".join(e["components"]))')" \
+check "$(jval 'e=d["entries"][0];print(",".join(e["components"]))' openrecord map --for specs/rule)" \
       "api" "el spec declara la superficie que toca"
 check "$(rc openrecord validate)" "0" "validate limpio"
 
@@ -173,26 +246,26 @@ before="$(sha256sum "$written" | cut -d' ' -f1)"
 printf '## Rule\n\nno va acá\n' > "$HOME/mal.md"
 check "$(rc openrecord record edit "$written" --section '## Decision' --body-file "$HOME/mal.md")" "1" "un edit que rompe el record"
 check "$(sha256sum "$written" | cut -d' ' -f1)" "$before" "y el archivo quedó byte a byte igual"
-check "$(openrecord record edit "$written" --section '## Decision' --body-file "$HOME/mal.md" 2>&1 | python3 -c 'import json,sys;d=json.load(sys.stdin);print("written" in d, "edited" in d)')" \
+check "$(jstr 'print("written" in d, "edited" in d)' "$(openrecord record edit "$written" --section '## Decision' --body-file "$HOME/mal.md" 2>&1)")" \
       "False True" "el fallo se reporta bajo 'edited', no bajo 'written'"
 
 step "7. Navegación y contrato"
 check "$(rc openrecord map --for specs/process)"        "0" "un tipo de spec vacío se puede abrir"
 check "$(rc openrecord map --for decisions/nope)"       "1" "map rechaza una coordenada inexistente"
 check "$(rc openrecord validate --for decisions/nope)"  "1" "y validate coincide"
-check "$(openrecord map --for "$written" 2>&1 | python3 -c 'import json,sys;print("is a record" in json.load(sys.stdin)["message"])')" \
+check "$(jstr 'print("is a record" in d["message"])' "$(openrecord map --for "$written" 2>&1)")" \
       "True" "una coordenada que nombra un record lo dice"
 h="$(openrecord record write --help)"
 # Aparece dos veces y está bien: en la linea de Usage y en la lista de Flags.
 check "$(printf '%s' "$h" | grep -A20 '^Flags:' | grep -c -- '--components')" "1" "el help lista --components entre sus flags"
 check "$(printf '%s' "$(openrecord skills --help)" | grep -A20 '^Flags:' | grep -c -- '--dry-run')" "1" "y el de skills lista --dry-run"
-o="$(openrecord component owners src/api/handlers.py)"
-check "$(printf '%s' "$o" | python3 -c 'import json,sys;d=json.load(sys.stdin);print(d["owner"],",".join(d["specs"]))')" \
+o="$(openrecord component owners src/api/handlers.py 2>&1)"
+check "$(jstr 'print(d["owner"],",".join(d["specs"]))' "$o")" \
       "api specs/rule/idempotent-writes.md" "owners devuelve la superficie y los specs que la nombran"
-g="$(openrecord grep 'Idempotency-Key' --for decisions)"
-check "$(printf '%s' "$g" | python3 -c 'import json,sys;m=json.load(sys.stdin)["matches"];print(len(m),len({x["path"] for x in m}))')" \
+g="$(openrecord grep 'Idempotency-Key' --for decisions 2>&1)"
+check "$(jstr 'm=d["matches"];print(len(m),len({x["path"] for x in m}))' "$g")" \
       "1 1" "grep devuelve una entrada por record, no por línea"
-check "$(printf '%s' "$g" | python3 -c 'import json,sys;print(json.load(sys.stdin)["matches"][0]["hits"]>1)')" "True" "y cuenta las líneas que coincidieron"
+check "$(jstr 'print(d["matches"][0]["hits"]>1)' "$g")" "True" "y cuenta las líneas que coincidieron"
 
 step "8. Skills y emit"
 openrecord skills --emit .claude/skills/ --with-qmd >/dev/null
@@ -247,25 +320,29 @@ step "10. Búsqueda semántica, desde un índice inexistente"
 mkdir -p "$HOME/.config/qmd"
 printf 'models:\n  embed: openai/text-embedding-3-small\n  generate: openai/gpt-4o-mini\n' > "$HOME/.config/qmd/index.yml"
 check "$(qmd doctor 2>&1 | grep -c 'search provider: not exercised')" "1" "en un índice vacío el doctor no afirma nada del proveedor"
-for c in $(openrecord qmd status | python3 -c 'import json,sys;print(" ".join(json.load(sys.stdin)["collections_needed"]))'); do
+collections_needed="$(jval 'print(" ".join(d["collections_needed"]))' openrecord qmd status)"
+check "$([ "$collections_needed" = "$JBAD" ] && echo "$collections_needed" || echo ok)" "ok" "el status devolvió la lista de colecciones a registrar"
+for c in $collections_needed; do
   sub=$(echo "$c" | sed 's/^work-//; s/decisions-/decisions\//')
   qmd collection add "$PWD/.openrecord/$sub" --name "$c" --mask '**/*.md' >/dev/null 2>&1
 done
 check "$(qmd collection list 2>/dev/null | grep -c '^work-')" "3" "tres colecciones registradas"
-qmd embed >/dev/null 2>&1
+if ! embed_out="$(qmd embed 2>&1)"; then
+  printf '%s\n' "$embed_out" >&2
+fi
 check "$(qmd doctor 2>&1 | grep -c 'search provider: answered every call')" "1" "después de embeber, el proveedor respondió"
 
 step "11. Las búsquedas: ¿devuelven lo correcto?"
 Q='what keeps a retried request from charging twice'
 note "pregunta: $Q"
-check "$(openrecord grep 'retried' --for decisions | python3 -c 'import json,sys;print(len(json.load(sys.stdin)["matches"]))')" "0" "el literal no encuentra nada — no está esa palabra"
-top="$(qmd vsearch "$Q" -c work-decisions-api -c work-specs --format json 2>/dev/null | python3 -c 'import json,sys;r=json.load(sys.stdin);print(r[0]["file"] if r else "nada")' 2>/dev/null)"
+check "$(jval 'print(len(d["matches"]))' openrecord grep 'retried' --for decisions)" "0" "el literal no encuentra nada — no está esa palabra"
+top="$(jval 'print(d[0]["file"] if d else "nada")' qmd vsearch "$Q" -c work-decisions-api -c work-specs --format json)"
 note "primer resultado semántico: $top"
 check "$(printf '%s' "$top" | grep -c 'idempotency-key-required\|idempotent-writes')" "1" "y el semántico devuelve EL record correcto"
-Q2='which surface runs work nobody triggered'
-top2="$(qmd vsearch "$Q2" -c work-decisions-worker --format json 2>/dev/null | python3 -c 'import json,sys;r=json.load(sys.stdin);print(r[0]["file"] if r else "nada")' 2>/dev/null)"
+Q2='why a queue was rejected for background work'
+top2="$(jval 'print(d[0]["file"] if d else "nada")' qmd vsearch "$Q2" -c work-decisions-worker --format json)"
 note "pregunta: $Q2  →  $top2"
-check "$(printf '%s' "$top2" | grep -c 'worker')" "1" "una consulta acotada a una superficie devuelve la suya"
+check "$top2" "qmd://work-decisions-worker/runtime/scheduled-in-process-jobs.md" "una consulta acotada a una superficie devuelve la suya"
 
 step "12. Proveedor caído: no puede parecer un resultado vacío"
 bad_key() { QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA "$@" >/dev/null 2>&1; echo $?; }
