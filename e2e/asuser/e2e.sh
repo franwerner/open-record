@@ -61,11 +61,7 @@ jval() { # jval <expr> <cmd...>: corre <cmd> con stdout capturado y stderr en $J
 
 step "0. Punto de partida"
 note "usuario: $(id -un)  ·  HOME: $HOME"
-if [ "${BUILD_LOCAL:-no}" = "yes" ]; then
-  note "openrecord: colocado por el arnés desde el working tree"
-else
-  check "$(command -v openrecord || echo nada)" "nada" "openrecord no está instalado"
-fi
+check "$(command -v openrecord || echo nada)" "nada" "openrecord no está instalado"
 # En esta máquina hay un qmd system-wide (/usr/local/bin/qmd, symlink a un
 # checkout de matecito-ai), así que ningún usuario arranca sin qmd en el PATH.
 # Lo que importa para la prueba es que ESTE usuario no tenga uno propio.

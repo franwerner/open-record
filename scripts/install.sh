@@ -10,6 +10,10 @@
 #   WITH_QMD      yes | no. Install semantic search too. Asked interactively when
 #                 unset and a terminal is attached; "no" otherwise, because a
 #                 piped install must never block waiting for an answer.
+#   BASE_URL      Where the release assets live (default: this repository's
+#                 GitHub releases). The tag and the asset name are still composed
+#                 here, so the archive has to sit at $BASE_URL/$VERSION/$asset.
+#                 Set VERSION alongside it: resolving "latest" still asks GitHub.
 set -euo pipefail
 
 REPO="franwerner/open-record"
@@ -17,6 +21,9 @@ BINARY="openrecord"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-latest}"
 WITH_QMD="${WITH_QMD:-}"
+# Overridable so this script itself can be exercised against a locally built
+# release; until it was, the only installer anybody could test was the published one.
+BASE_URL="${BASE_URL:-https://github.com/$REPO/releases/download}"
 # Global, not local to main(): the EXIT trap fires after main() has returned, so
 # a local would be out of scope and `set -u` would abort the cleanup — leaving
 # the temp directory behind and failing an otherwise successful install.
@@ -49,7 +56,7 @@ detect_arch() {
   case "$(uname -m)" in
     x86_64|amd64)  echo "amd64" ;;
     arm64|aarch64) echo "arm64" ;;
-    *) err "unsupported architecture: $(uname -m)" ;;
+    *) err "unsupported architecture: $(uname -m). Download a binary from https://github.com/$REPO/releases" ;;
   esac
 }
 
@@ -143,7 +150,7 @@ main() {
   tmp="$(mktemp -d)"
 
   info "downloading $BINARY $tag ($os/$arch)"
-  curl -fsSL "https://github.com/$REPO/releases/download/$tag/$asset" -o "$tmp/$asset" \
+  curl -fsSL "$BASE_URL/$tag/$asset" -o "$tmp/$asset" \
     || err "download failed: $asset not found in release $tag"
 
   tar -xzf "$tmp/$asset" -C "$tmp"
