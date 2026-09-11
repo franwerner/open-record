@@ -170,6 +170,17 @@ a single session, and the conversation looks complete throughout — the transcr
 the store rather than against the conversation.** `openrecord map` is the check; the chat history is
 not evidence.
 
+**Editing the file instead of the record.** An agent with a file-editing tool will reach for it, because
+a record is a `.md` and editing one looks like editing any other file. Every guard lives on the write
+path, so an edit that goes around `record write` / `record edit` goes around all of them. This is not
+hypothetical: in a session where the skills were loaded and followed, an agent made 21 `record write`
+calls, zero `record edit` calls, and one direct file edit — the one change nothing checked.
+
+Since the body hash exists, that edit no longer passes unnoticed: `validate` reports
+`body-hash-mismatch` on a record whose body no longer matches the hash the tool stamped. Detection, not
+prevention — an ecosystem that wants to stop it before it happens still needs its own guard, because the
+binary does not police anyone's editor.
+
 **Inventing the why.** The reasoning is the only part of a record that cannot be reconstructed from the
 code. An agent that fills in a plausible-sounding rationale has produced something worse than an empty
 store, because it reads exactly like a real record. If the reason is not known, the honest record says
@@ -194,6 +205,12 @@ level exists, that a spec names declared components — it cannot know whether t
 one the team holds, or whether the prose describes the system as built. That gap is what the consult
 and capture moments exist to close, and it closes only as often as your ecosystem runs them.
 
-It also never blocks. Every guard described here is behaviour your agents carry, not a gate the binary
-enforces. openrecord will happily hold a store that contradicts the code it lives beside; keeping the
-two in step is the integration's job, which is the whole reason this document exists.
+There is one thing in between, and it is worth knowing exactly how far it reaches. The body hash does
+not tell you whether a record is *true*; it tells you whether its body is the one the tool wrote. That
+is the only check here that survives without your cooperation — it needs no hook, no harness and no
+commit, so it holds for an agent you did not write, a tool you did not configure, and a person editing
+by hand.
+
+Everything else never blocks: the guards described here are behaviour your agents carry, not gates the
+binary enforces. openrecord will happily hold a store that contradicts the code it lives beside; keeping
+the two in step is the integration's job, which is the whole reason this document exists.
