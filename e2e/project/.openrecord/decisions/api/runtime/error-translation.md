@@ -2,6 +2,7 @@
 title: Business errors are their own hierarchy
 description: "Business errors are modelled as their own hierarchy, and a provider's errors are translated at the adapter boundary so no foreign error type travels inward."
 status: accepted
+body-hash: a5f5ffd6171e20653903e6ddd8abc319658e14e0fd55684e3a70389c9701f48f
 ---
 
 ## Context

@@ -3,6 +3,7 @@ title: Place an order
 description: A shopper turns a basket into a paid order, seeing the total before it is charged; a decline leaves the basket untouched and a repeated submission charges once.
 status: accepted
 components: [api, web]
+body-hash: 61b289e0697e0c580632ac68444e6f2ef76d973a9f0cf44875b9df50b95b89f8
 ---
 
 ## Purpose

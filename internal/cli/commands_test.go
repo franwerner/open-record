@@ -136,7 +136,7 @@ func TestComponentRemoveIsBlockedByRecordsAndBySpecs(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(flow, "signup.md"),
-		[]byte("---\ntitle: x\ndescription: y\nstatus: accepted\ncomponents: [api]\n---\n"), 0o644); err != nil {
+		[]byte("---\ntitle: x\ndescription: y\nstatus: accepted\ncomponents: [api]\nbody-hash: "+store.BodyHash("")+"\n---\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if code, _, stderr := runIn(t, repo, "component", "remove", "api"); code == exitOK {

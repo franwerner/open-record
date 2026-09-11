@@ -64,6 +64,7 @@ func runRecordWrite(env Env, args []string) error {
 		Components:  components,
 		Body:        string(body),
 	}
+	record.BodyHash = store.BodyHash(record.Body)
 	rendered := store.RenderRecord(record, coordinate.Kind)
 
 	declared, err := store.LoadComponents(env.Repo)
@@ -164,6 +165,7 @@ func runRecordEdit(env Env, args []string) error {
 		existing.Components = components
 	}
 
+	existing.BodyHash = store.BodyHash(existing.Body)
 	rendered := store.RenderRecord(existing, coordinate.Kind)
 	declared, err := store.LoadComponents(env.Repo)
 	if err != nil {

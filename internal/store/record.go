@@ -1,8 +1,11 @@
 package store
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/franwerner/openrecord/internal/finding"
@@ -29,7 +32,13 @@ const (
 	FieldDescription = "description"
 	FieldStatus      = "status"
 	FieldComponents  = "components"
+	FieldBodyHash    = "body-hash"
 )
+
+// bodyHashPattern is the value's whole domain: exactly 64 lowercase
+// hexadecimal characters. Anything present but outside it is malformed, not
+// missing.
+var bodyHashPattern = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
 // Index is what a level's INDEX.md carries — and all it carries. It never
 // enumerates what is inside: listing is generated from frontmatter, so there is
@@ -47,7 +56,34 @@ type Record struct {
 	// Components is the surfaces a spec reaches. Mandatory there, absent on a
 	// decision, which is closed by the component it is filed under.
 	Components []string
-	Body       string
+	// BodyHash is the stamped SHA-256 of the body, carried verbatim. Empty when
+	// the field was absent or outside its domain — both already reported.
+	BodyHash string
+	Body     string
+}
+
+// BodyHash is the SHA-256 of the body as it exists after a round trip: line
+// endings folded, leading newlines dropped, one trailing newline. Hashing the
+// caller's raw string instead would make a record written from a body file
+// with no trailing newline fail its own check at write time.
+func BodyHash(body string) string {
+	sum := sha256.Sum256([]byte(normaliseBody(body)))
+	return hex.EncodeToString(sum[:])
+}
+
+// normaliseBody puts a body into the exact shape it will have after a
+// parse-then-render round trip, so the hash is a function of the record's
+// content rather than of how the string reached the call site.
+func normaliseBody(body string) string {
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	body = strings.TrimLeft(body, "\n")
+	if body == "" {
+		return body
+	}
+	if !strings.HasSuffix(body, "\n") {
+		body += "\n"
+	}
+	return body
 }
 
 // ReadIndex loads a level's index.
@@ -126,7 +162,17 @@ func ParseRecord(raw []byte, kind Kind, path string) (Record, []finding.Finding)
 			"status is %q; the only values are %s and %s", status, Accepted, Pending).At(path))
 	}
 
-	known := []string{FieldTitle, FieldDescription, FieldStatus}
+	if hash, ok := document.String(FieldBodyHash); ok && bodyHashPattern.MatchString(hash) {
+		record.BodyHash = hash
+	} else if document.Has(FieldBodyHash) {
+		findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+			"body-hash must be exactly 64 lowercase hexadecimal characters").At(path))
+	} else {
+		findings = append(findings, finding.Errorf(finding.CodeBodyHashMissing,
+			"a record needs a body-hash: it is what lets validation notice a body changed outside the tool").At(path))
+	}
+
+	known := []string{FieldTitle, FieldDescription, FieldStatus, FieldBodyHash}
 	if kind == Specs {
 		known = append(known, FieldComponents)
 		record.Components, _ = document.Strings(FieldComponents)
@@ -164,6 +210,7 @@ func RenderRecord(record Record, kind Kind) []byte {
 	if kind == Specs {
 		fields = append(fields, frontmatter.List(FieldComponents, record.Components))
 	}
+	fields = append(fields, frontmatter.Text(FieldBodyHash, record.BodyHash))
 	return frontmatter.Render(fields, record.Body)
 }
 

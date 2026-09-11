@@ -2,6 +2,7 @@
 title: Test at the boundary the change would be noticed at
 description: Behaviour is tested through the surface that offers it with providers stubbed at the adapter boundary; wiring is deliberately untested, and a test asserts an outcome, never a call.
 status: accepted
+body-hash: f1cb0a566b4809acd267c2a577faedd1aa08a61e5917d8f71808fab703a08e19
 ---
 
 ## Context

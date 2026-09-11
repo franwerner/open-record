@@ -2,6 +2,7 @@
 title: Server data is never held as local state
 description: Server data is fetched and invalidated by the mutation that changed it, never written into local state; a screen owns only what closing it would lose.
 status: accepted
+body-hash: 316a1beb98a730b8e3bb9e03150460960d550a54d50f6f01f0cec07735cbe7a9
 ---
 
 ## Context

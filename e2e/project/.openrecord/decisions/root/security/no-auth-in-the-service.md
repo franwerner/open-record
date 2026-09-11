@@ -2,6 +2,7 @@
 title: The service authenticates nothing itself
 description: Identity is established at the gateway and taken as given inward; the service performs no authentication of its own, and this absence is decided rather than forgotten.
 status: accepted
+body-hash: 1f72333ad35e36efc2b47afdea650fb3b5cd67f8540180be9064573993d4ff2f
 ---
 
 ## Context

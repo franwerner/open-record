@@ -3,6 +3,7 @@ title: Order
 description: An order runs from awaiting payment to delivered, and can leave for abandoned, refunded, lost in transit or returned; cancellation is possible until the warehouse picks it.
 status: accepted
 components: [api, web, cli]
+body-hash: 44e9217d2481a9d9f97aec0f07d625b574c808c7ba614abb6c8673ae1fdcce36
 ---
 
 ## Purpose

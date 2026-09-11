@@ -2,6 +2,7 @@
 title: Whether a key can have its own quota
 description: Whether an individual API key can carry a quota of its own is deliberately undecided; the single shared limit governs until someone settles it.
 status: pending
+body-hash: d0b1f55a4fa1db1d919b5349ac0af8bbb3f631f56f0fbfc72eca01f160524621
 ---
 
 ## Context

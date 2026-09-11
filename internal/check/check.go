@@ -21,6 +21,13 @@ const FlatConcern = 5
 func Record(raw []byte, coordinate store.Coordinate, declared store.Components, path string) []finding.Finding {
 	record, findings := store.ParseRecord(raw, coordinate.Kind, path)
 
+	if record.BodyHash != "" && store.BodyHash(record.Body) != record.BodyHash {
+		// A malformed or absent value was already reported by ParseRecord; this
+		// only fires when there was something well-formed to disagree with.
+		findings = append(findings, finding.Errorf(finding.CodeBodyHashMismatch,
+			"the body no longer matches its stamped hash — it was changed outside record write/edit").At(path))
+	}
+
 	if coordinate.Kind == store.Specs {
 		for _, component := range record.Components {
 			if !declared.Has(component) {

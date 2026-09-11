@@ -261,8 +261,11 @@ openrecord record write decisions/api/security/rate-limiting.md \
 ```
 
 Both halves are validated: the frontmatter against what the store requires (fields present, every
-component declared), and the body against the type's template — the sections that must be there, branch
-anchors pointing at steps that exist, transition lines in the fixed shape.
+component declared), and the body against the type's template. Each spec type requires its own
+structural section — `flow` requires `## Main flow`; `lifecycle` requires `## States and transitions`;
+`process` requires `## Trigger` and `## Main flow`; `rule` requires none of its own — plus branch anchors
+pointing at steps that exist and transition lines in the fixed shape. Every other type section
+(`## Branches`, `## Edge cases`, `## Errors facing the actor`, `## Rule`) stays allowed but optional.
 
 **If anything fails, nothing is written.** The command returns the same `code` and `severity` findings
 `validate` returns, so there is one vocabulary for what is wrong with a record regardless of when you
@@ -334,6 +337,8 @@ disappeared).
 | `empty-components` | error | A spec with no components. |
 | `branch-anchor-not-found` | error | A branch anchored to a step its flow does not have. |
 | `invalid-frontmatter` | error | Frontmatter absent or malformed. |
+| `body-hash-missing` | error | A record's frontmatter has no `body-hash` field. |
+| `body-hash-mismatch` | error | A `body-hash` is well-formed but does not match the body — the body drifted outside the tool. |
 | `index-missing-description` | error | An `INDEX.md` with no `title` or no `description`. |
 | `component-path-missing` | warning | A declared directory that is not in the repository — silent drift. |
 | `unreachable-state` / `dead-end-state` | warning | A state with no way in, or no way out. A design bug nobody sees today. |

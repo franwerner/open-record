@@ -2,6 +2,7 @@
 title: The version is in the URL, and a version is additive
 description: The API version is carried in the URL; inside a version only additive change ships, and a consumer keeps working until that version is retired.
 status: accepted
+body-hash: 417ae3d1199eaaeb8649a525575beb52ad575f2c93dafca4e6010cd7b83dc4ef
 ---
 
 ## Context

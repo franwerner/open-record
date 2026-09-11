@@ -89,13 +89,16 @@ title: User signup
 description: A visitor registers with email and password; the account stays pending until they verify the email.
 status: accepted
 components: [api, ui]
+body-hash: 50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c
 ---
 ```
 
 `title`, `description` and `status` work exactly as in a
 [decision record](decision-record.md#frontmatter) — the description states the behaviour in one line,
 so an agent can decide whether to open the file without opening it, and the status is `accepted` or
-`pending` with no third state.
+`pending` with no third state. `body-hash` is stamped by the tool, never written by hand — see
+[decision-record.md](decision-record.md#body-hash) for the field description; it is identical on both
+record kinds.
 
 ### `components`
 
@@ -135,12 +138,14 @@ edge case has at least one:
 
 ### By type
 
-| Type | Adds |
-| --- | --- |
-| `flow` | `## Main flow` (numbered) · `## Branches` · `## Edge cases` · `## Errors facing the actor` |
-| `rule` | `## Rule` — the invariant, with concrete values |
-| `lifecycle` | `## States and transitions` |
-| `process` | `## Trigger` · `## Main flow` · `## Edge cases` |
+| Type | Required | Optional |
+| --- | --- | --- |
+| `flow` | `## Main flow` | `## Branches` · `## Edge cases` · `## Errors facing the actor` |
+| `rule` | — | `## Rule` — the invariant, with concrete values |
+| `lifecycle` | `## States and transitions` | — |
+| `process` | `## Trigger` · `## Main flow` | `## Edge cases` |
+
+An absent required section is reported as `missing-section`; an absent optional one is not.
 
 - **`## Main flow`** — the happy path, numbered. Each step is one observable action.
 - **`## Branches`** — each fork off the happy path, anchored to the step it forks from:

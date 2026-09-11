@@ -43,6 +43,8 @@ const (
 	CodeMissingSection       = "missing-section"
 	CodeUnexpectedSection    = "unexpected-section"
 	CodeMalformedScenario    = "malformed-scenario"
+	CodeBodyHashMissing      = "body-hash-missing"
+	CodeBodyHashMismatch     = "body-hash-mismatch"
 )
 
 // Finding is one thing wrong with one file.

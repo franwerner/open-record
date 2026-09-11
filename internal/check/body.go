@@ -23,12 +23,19 @@ var decisionSections = []string{"## Context", "## Decision", "## Alternatives", 
 // because an absent section reads as "does not apply here" and an empty one
 // reads as "nobody wrote this yet".
 var (
-	specCore   = []string{"## Purpose", "## Scenarios"}
-	specByType = map[string][]string{
-		"flow":      {"## Main flow", "## Branches", "## Edge cases", "## Errors facing the actor"},
-		"rule":      {"## Rule"},
+	specCore = []string{"## Purpose", "## Scenarios"}
+	// specRequiredByType is what a spec of that type cannot validate without —
+	// appended to `required` in addition to `allowed`. An absent one, unlike an
+	// absent optional section, is a defect, not "does not apply here".
+	specRequiredByType = map[string][]string{
+		"flow":      {"## Main flow"},
 		"lifecycle": {"## States and transitions"},
-		"process":   {"## Trigger", "## Main flow", "## Edge cases"},
+		"process":   {"## Trigger", "## Main flow"},
+	}
+	specOptionalByType = map[string][]string{
+		"flow":    {"## Branches", "## Edge cases", "## Errors facing the actor"},
+		"rule":    {"## Rule"},
+		"process": {"## Edge cases"},
 	}
 )
 
@@ -47,8 +54,8 @@ func Body(body string, kind store.Kind, specType, path string) []finding.Finding
 	required := decisionSections
 	allowed := decisionSections
 	if kind == store.Specs {
-		required = specCore
-		allowed = append(append([]string{}, specCore...), specByType[specType]...)
+		required = append(append([]string{}, specCore...), specRequiredByType[specType]...)
+		allowed = append(append([]string{}, required...), specOptionalByType[specType]...)
 	}
 
 	findings := missingAndUnexpected(sections, required, allowed, kind, specType, path)

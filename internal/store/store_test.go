@@ -46,18 +46,21 @@ func fixture(t *testing.T) string {
 		t.Fatal(err)
 	}
 
+	decisionBody := "## Context\n\nx\n"
+	specBody := "## Purpose\n\nx\n"
+
 	index(Root+"/decisions/api", "API", "The HTTP surface.")
 	index(Root+"/decisions/api/security", "Security", "Auth, permissions, limits.")
 	index(Root+"/decisions/api/security/rate-limits", "Rate limits", "How limits are computed.")
 	write(Root+"/decisions/api/security/token-identity.md",
-		"---\ntitle: Identity travels in a signed token\ndescription: Identity is a signed token, not a session.\nstatus: accepted\n---\n\n## Context\n\nx\n")
+		"---\ntitle: Identity travels in a signed token\ndescription: Identity is a signed token, not a session.\nstatus: accepted\nbody-hash: "+BodyHash(decisionBody)+"\n---\n\n"+decisionBody)
 	write(Root+"/decisions/api/security/rate-limits/at-the-gateway.md",
-		"---\ntitle: Rate limiting at the gateway\ndescription: Applied at the gateway, not per handler.\nstatus: accepted\n---\n\n## Context\n\nx\n")
+		"---\ntitle: Rate limiting at the gateway\ndescription: Applied at the gateway, not per handler.\nstatus: accepted\nbody-hash: "+BodyHash(decisionBody)+"\n---\n\n"+decisionBody)
 
 	index(Root+"/decisions/root", "Root", "Tooling and CI.")
 	index(Root+"/specs/flow", "Flow", "Operations an actor triggers.")
 	write(Root+"/specs/flow/user-signup.md",
-		"---\ntitle: User signup\ndescription: A visitor registers with email and password.\nstatus: accepted\ncomponents: [api]\n---\n\n## Purpose\n\nx\n")
+		"---\ntitle: User signup\ndescription: A visitor registers with email and password.\nstatus: accepted\ncomponents: [api]\nbody-hash: "+BodyHash(specBody)+"\n---\n\n"+specBody)
 
 	return repo
 }
@@ -276,24 +279,46 @@ func TestReadRecordRejects(t *testing.T) {
 		source string
 		kind   Kind
 		code   string
+		// absent lists codes that must NOT appear alongside code — used to pin
+		// that a malformed body-hash is neither missing nor a mismatch.
+		absent []string
 	}{
-		"bad status":            {"---\ntitle: x\ndescription: y\nstatus: proposed\n---\n", Decisions, "invalid-frontmatter"},
-		"spec without surfaces": {"---\ntitle: x\ndescription: y\nstatus: accepted\n---\n", Specs, "empty-components"},
-		"decision with them":    {"---\ntitle: x\ndescription: y\nstatus: accepted\ncomponents: [api]\n---\n", Decisions, "invalid-frontmatter"},
-		"no description":        {"---\ntitle: x\nstatus: accepted\n---\n", Decisions, "invalid-frontmatter"},
-		"unknown field":         {"---\ntitle: x\ndescription: y\nstatus: accepted\nowner: me\n---\n", Decisions, "invalid-frontmatter"},
+		"bad status":            {source: "---\ntitle: x\ndescription: y\nstatus: proposed\n---\n", kind: Decisions, code: "invalid-frontmatter"},
+		"spec without surfaces": {source: "---\ntitle: x\ndescription: y\nstatus: accepted\nbody-hash: " + BodyHash("") + "\n---\n", kind: Specs, code: "empty-components"},
+		"decision with them":    {source: "---\ntitle: x\ndescription: y\nstatus: accepted\ncomponents: [api]\nbody-hash: " + BodyHash("") + "\n---\n", kind: Decisions, code: "invalid-frontmatter"},
+		"no description":        {source: "---\ntitle: x\nstatus: accepted\n---\n", kind: Decisions, code: "invalid-frontmatter"},
+		"no title":              {source: "---\ndescription: y\nstatus: accepted\n---\n", kind: Decisions, code: "invalid-frontmatter"},
+		"unknown field":         {source: "---\ntitle: x\ndescription: y\nstatus: accepted\nowner: me\n---\n", kind: Decisions, code: "invalid-frontmatter"},
+		"no body-hash": {
+			source: "---\ntitle: x\ndescription: y\nstatus: accepted\n---\n",
+			kind:   Decisions,
+			code:   "body-hash-missing",
+		},
+		"malformed body-hash": {
+			source: "---\ntitle: x\ndescription: y\nstatus: accepted\nbody-hash: ABC123\n---\n",
+			kind:   Decisions,
+			code:   "invalid-frontmatter",
+			absent: []string{"body-hash-missing", "body-hash-mismatch"},
+		},
 	}
 	for name, item := range cases {
 		t.Run(name, func(t *testing.T) {
 			_, findings := ParseRecord([]byte(item.source), item.kind, "x.md")
 			found := false
+			seen := map[string]bool{}
 			for _, f := range findings {
+				seen[f.Code] = true
 				if f.Code == item.code {
 					found = true
 				}
 			}
 			if !found {
 				t.Errorf("want %q, got %+v", item.code, findings)
+			}
+			for _, code := range item.absent {
+				if seen[code] {
+					t.Errorf("did not want %q, got %+v", code, findings)
+				}
 			}
 		})
 	}
@@ -312,12 +337,34 @@ func TestReadIndexRejectsABody(t *testing.T) {
 }
 
 func TestRecordRoundTrip(t *testing.T) {
-	source := []byte("---\ntitle: User signup\ndescription: A visitor registers.\nstatus: accepted\ncomponents: [api, ui]\n---\n\n## Purpose\n\nx\n")
+	body := "## Purpose\n\nx\n"
+	source := []byte("---\ntitle: User signup\ndescription: A visitor registers.\nstatus: accepted\ncomponents: [api, ui]\nbody-hash: " + BodyHash(body) + "\n---\n\n" + body)
 	record, findings := ParseRecord(source, Specs, "x.md")
 	if len(findings) != 0 {
 		t.Fatalf("valid spec produced findings: %+v", findings)
 	}
 	if got := RenderRecord(record, Specs); string(got) != string(source) {
 		t.Errorf("round trip changed the file:\nwant %q\ngot  %q", source, got)
+	}
+}
+
+// TestBodyHashNormalisesBeforeHashing pins the reason BodyHash normalises: a
+// body written from a `--body-file` with no trailing newline, a leading blank
+// line, or CRLF endings must hash identically to its canonical, round-tripped
+// form — otherwise a record the tool itself just wrote would fail its own
+// check the instant it is re-parsed.
+func TestBodyHashNormalisesBeforeHashing(t *testing.T) {
+	canonical := BodyHash("body\n")
+	variants := map[string]string{
+		"no trailing newline": "body",
+		"leading blank line":  "\nbody\n",
+		"CRLF line endings":   "body\r\n",
+	}
+	for name, body := range variants {
+		t.Run(name, func(t *testing.T) {
+			if got := BodyHash(body); got != canonical {
+				t.Errorf("BodyHash(%q) = %s, want %s (same as the canonical form)", body, got, canonical)
+			}
+		})
 	}
 }

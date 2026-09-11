@@ -3,6 +3,7 @@ title: Usage limits
 description: 60 requests per minute per API key across the whole surface; the next one is refused with 429 and a Retry-After, and refused requests still consume budget.
 status: accepted
 components: [api]
+body-hash: 4fd75f251cc763fa3d4ac0041c203578a93f7892ac95409e777fba47f0841b11
 ---
 
 ## Purpose

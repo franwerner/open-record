@@ -3,6 +3,7 @@ title: Sign up
 description: A visitor registers with an email and password; the account cannot sign in until the emailed link is opened, and a taken address is indistinguishable from a free one.
 status: accepted
 components: [api, web]
+body-hash: 25a0213de15f8a93daadc72326523488ddd17e26a0797727722462998456592f
 ---
 
 ## Purpose

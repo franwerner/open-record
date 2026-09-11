@@ -252,3 +252,152 @@ func TestValidateOutputIsStable(t *testing.T) {
 		t.Error("two runs differ; a checker whose order shifts produces CI diffs nobody reads")
 	}
 }
+
+// bodyHashOf pulls the `body-hash` value out of a rendered record's raw bytes,
+// and fails the test if it is not present as the last frontmatter field.
+func bodyHashOf(t *testing.T, raw []byte) string {
+	t.Helper()
+	text := string(raw)
+	lines := strings.Split(text, "\n")
+	for index, line := range lines {
+		if strings.HasPrefix(line, "body-hash: ") {
+			if lines[index+1] != "---" {
+				t.Errorf("body-hash is not the last frontmatter field: %s", text)
+			}
+			return strings.TrimPrefix(line, "body-hash: ")
+		}
+	}
+	t.Fatalf("no body-hash field found: %s", text)
+	return ""
+}
+
+func TestRecordWriteStampsCleanly(t *testing.T) {
+	repo := declared(t)
+	target := "decisions/api/security/rate-limiting.md"
+	mustRun(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--body-file", bodyFile(t, decisionBody))
+
+	full := filepath.Join(repo, store.Root, filepath.FromSlash(target))
+	raw, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hash := bodyHashOf(t, raw)
+	if hash != store.BodyHash(decisionBody) {
+		t.Errorf("stamped hash = %s, want the SHA-256 of the body written", hash)
+	}
+
+	if _, stdout, _ := runIn(t, repo, "validate"); strings.Contains(stdout, "body-hash") {
+		t.Errorf("a freshly written record raised a body-hash finding: %s", stdout)
+	}
+}
+
+func TestRecordEditReStampsTheHash(t *testing.T) {
+	repo := declared(t)
+	target := "decisions/api/security/rate-limiting.md"
+	mustRun(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--body-file", bodyFile(t, decisionBody))
+	full := filepath.Join(repo, store.Root, filepath.FromSlash(target))
+	before, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeHash := bodyHashOf(t, before)
+
+	mustRun(t, repo, "record", "edit", target,
+		"--section", "## Alternatives",
+		"--body-file", bodyFile(t, "We considered per-handler limits and rejected them.\n"))
+
+	after, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterHash := bodyHashOf(t, after)
+	if afterHash == beforeHash {
+		t.Error("editing the body did not change the stamped hash")
+	}
+	if _, stdout, _ := runIn(t, repo, "validate"); strings.Contains(stdout, "body-hash") {
+		t.Errorf("the re-stamped record raised a body-hash finding: %s", stdout)
+	}
+}
+
+func TestRecordEditMetadataOnlyLeavesTheHashUnchanged(t *testing.T) {
+	repo := declared(t)
+	target := "decisions/api/security/rate-limiting.md"
+	mustRun(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--body-file", bodyFile(t, decisionBody))
+	full := filepath.Join(repo, store.Root, filepath.FromSlash(target))
+	before, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeHash := bodyHashOf(t, before)
+
+	mustRun(t, repo, "record", "edit", target, "--title", "Rate limiting, revisited")
+
+	after, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	afterHash := bodyHashOf(t, after)
+	if afterHash != beforeHash {
+		t.Error("a metadata-only edit changed the stamped hash")
+	}
+}
+
+func TestRecordEditSucceedsOnADriftedRecord(t *testing.T) {
+	repo := declared(t)
+	target := "decisions/api/security/rate-limiting.md"
+	mustRun(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--body-file", bodyFile(t, decisionBody))
+	full := filepath.Join(repo, store.Root, filepath.FromSlash(target))
+
+	// Drift the body outside the tool, leaving the stamped hash stale.
+	raw, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drifted := strings.Replace(string(raw), "## Context\n\nx", "## Context\n\nchanged by hand", 1)
+	if err := os.WriteFile(full, []byte(drifted), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _, stderr := runIn(t, repo, "record", "edit", target, "--title", "still editable"); code != exitOK {
+		t.Fatalf("editing a drifted record was refused: %s", stderr)
+	}
+	mustRun(t, repo, "validate")
+}
+
+func TestHashLessRecordIsRefusedWhereverItIsRead(t *testing.T) {
+	repo := declared(t)
+	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+
+	body := "## Purpose\n\nx\n\n## Main flow\n\n1. one\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	target := filepath.Join(repo, store.Root, "specs", "flow", "signup.md")
+	raw := "---\ntitle: t\ndescription: d\nstatus: accepted\ncomponents: [api]\n---\n\n" + body
+	if err := os.WriteFile(target, []byte(raw), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, stdout, _ := runIn(t, repo, "validate"); code == exitOK {
+		t.Fatalf("a hash-less record validated clean: %s", stdout)
+	} else if !strings.Contains(stdout, "body-hash-missing") {
+		t.Errorf("validate did not report body-hash-missing: %s", stdout)
+	}
+
+	if code, stdout, _ := runIn(t, repo, "record", "edit", "specs/flow/signup.md", "--title", "new"); code == exitOK {
+		t.Fatal("editing a hash-less record was accepted")
+	} else if !strings.Contains(stdout, "body-hash-missing") {
+		t.Errorf("edit did not report body-hash-missing: %s", stdout)
+	}
+
+	if code, stdout, _ := runIn(t, repo, "diagram", "specs/flow/signup.md"); code == exitOK {
+		t.Fatal("a hash-less record produced a diagram")
+	} else if !strings.Contains(stdout, "body-hash-missing") {
+		t.Errorf("diagram did not report body-hash-missing: %s", stdout)
+	}
+}

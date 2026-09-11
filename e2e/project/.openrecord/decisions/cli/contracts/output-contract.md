@@ -2,6 +2,7 @@
 title: Readable by default, JSON on request
 description: Commands print for a person by default and switch wholly to JSON with a flag; exit status separates success, failure and a malformed invocation.
 status: accepted
+body-hash: 89b1b10bac7b2871a34180f0ae1a7490a2493c0595ebf7b0d585b865ab13105b
 ---
 
 ## Context

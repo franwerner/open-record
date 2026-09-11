@@ -2,6 +2,7 @@
 title: Rate limiting is applied at the gateway
 description: Request limits are applied at the gateway and computed per API key across the whole surface, never inside a handler.
 status: accepted
+body-hash: f86260a194e2bb8d3476fb210f77c3ddc7172baaa314660bc04767023f3c252d
 ---
 
 ## Context

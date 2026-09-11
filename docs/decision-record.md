@@ -127,6 +127,7 @@ This is what lets `decisions/api/` be read on its own, without dragging the rest
 title: Business errors are their own hierarchy
 description: Business errors are modelled as their own hierarchy; provider errors are translated at the adapter boundary.
 status: accepted
+body-hash: 50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c
 ---
 ```
 
@@ -166,6 +167,14 @@ There is no approval queue and no third state. Deliberately absent:
 - **`rejected`** — a rejected option is an alternative, and it lives inside the record that rejected
   it, not as a file of its own.
 - **`superseded` / `deprecated`** — you edit the record in place. Git carries the history.
+
+### `body-hash`
+
+The SHA-256 of the body only — never the frontmatter — hex-encoded, always last in the frontmatter.
+**Stamped by the tool, never written by hand:** `record write` computes it when the record is created,
+and `record edit` recomputes and re-stamps it on every edit, including one that touches only `title`,
+`description` or `status`. `validate` reports a body that no longer matches its stamped value, so a
+change made outside the tool becomes detectable without depending on git or on any agent harness.
 
 ### What is deliberately not here
 
