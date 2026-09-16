@@ -149,7 +149,7 @@ Check the store before proposing anything:
 
 ```
 openrecord map --for decisions/<component>
-openrecord grep "<topic>" --for decisions
+openrecord grep "<topic>" --for decisions/<component>
 ```
 
 A candidate duplicating an existing record is noise, and worse, it invites a second record saying

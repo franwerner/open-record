@@ -258,7 +258,7 @@ check "$(printf '%s' "$(openrecord skills --help)" | grep -A20 '^Flags:' | grep 
 o="$(openrecord component owners src/api/handlers.py 2>&1)"
 check "$(jstr 'print(d["owner"],",".join(d["specs"]))' "$o")" \
       "api specs/rule/idempotent-writes.md" "owners devuelve la superficie y los specs que la nombran"
-g="$(openrecord grep 'Idempotency-Key' --for decisions 2>&1)"
+g="$(openrecord grep 'Idempotency-Key' --for decisions/api 2>&1)"
 check "$(jstr 'm=d["matches"];print(len(m),len({x["path"] for x in m}))' "$g")" \
       "1 1" "grep devuelve una entrada por record, no por línea"
 check "$(jstr 'print(d["matches"][0]["hits"]>1)' "$g")" "True" "y cuenta las líneas que coincidieron"
@@ -334,7 +334,7 @@ step "11. Las búsquedas: ¿devuelven lo correcto?"
 # envelope diga honestamente qué mitades corrieron.
 Q='what keeps a retried request from charging twice'
 note "pregunta: $Q"
-check "$(jval 'print(len(d["matches"]))' openrecord grep 'retried' --for decisions)" "0" "el literal solo no encuentra nada — no está esa palabra"
+check "$(jval 'print(len(d["matches"]))' openrecord grep 'retried' --for decisions/api)" "0" "el literal solo no encuentra nada — no está esa palabra"
 r="$(openrecord search "$Q" --for decisions/api 2>/dev/null)"
 note "semantic: $(jstr 'print(d["semantic"])' "$r")  ·  $(jstr 'print(len(d["matches"]))' "$r") resultado(s)"
 check "$(jstr 'print(d["semantic"])' "$r")" "used" "las dos pasadas corrieron — hay modelo de embeddings"

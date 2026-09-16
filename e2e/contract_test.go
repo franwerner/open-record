@@ -86,9 +86,9 @@ func TestARejectedEditReportsItselfAsAnEdit(t *testing.T) {
 func TestGrepReportsEachRecordOnce(t *testing.T) {
 	repo := project(t)
 
-	// "gateway" appears several times inside the rate-limiting record and in the
-	// one about the service authenticating nothing.
-	report := decode[grepReport](t, mustRun(t, repo, "grep", "gateway", "--for", "decisions"))
+	// "gateway" appears several times inside the rate-limiting record and again
+	// in the neighboring one about per-key quotas — both under decisions/api.
+	report := decode[grepReport](t, mustRun(t, repo, "grep", "gateway", "--for", "decisions/api"))
 	if len(report.Matches) == 0 {
 		t.Fatal("no matches for a term the fixture uses repeatedly")
 	}
@@ -120,7 +120,7 @@ func TestGrepReportsEachRecordOnce(t *testing.T) {
 // says a hit leaves you standing where you can keep descending.
 func TestEveryGrepHitCanBeActedOn(t *testing.T) {
 	repo := project(t)
-	report := decode[grepReport](t, mustRun(t, repo, "grep", "the", "--for", "decisions"))
+	report := decode[grepReport](t, mustRun(t, repo, "grep", "the", "--for", "decisions/api"))
 	if len(report.Matches) < 3 {
 		t.Fatalf("expected the fixture to match a common word: %+v", report.Matches)
 	}

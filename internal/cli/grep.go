@@ -51,7 +51,7 @@ func runGrep(env Env, args []string) error {
 	if strings.TrimSpace(term) == "" {
 		return Errorf(finding.CodeUsage, "a literal search needs a term")
 	}
-	coordinate, err := store.ParseCoordinate(*where)
+	coordinate, err := lookupCoordinate("grep", *where)
 	if err != nil {
 		return err
 	}

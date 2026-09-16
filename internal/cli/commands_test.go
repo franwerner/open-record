@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/franwerner/openrecord/internal/finding"
 	"github.com/franwerner/openrecord/internal/store"
 )
 
@@ -206,7 +207,7 @@ func TestGrepSeparatesIndexHitsFromRecordHits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	report := decode[grepReport](t, mustRun(t, repo, "grep", "rate limit", "--for", "decisions"))
+	report := decode[grepReport](t, mustRun(t, repo, "grep", "rate limit", "--for", "decisions/api"))
 	var indexHits, recordHits int
 	for _, match := range report.Matches {
 		switch match.Kind {
@@ -253,6 +254,119 @@ func TestGrepSeparatesIndexHitsFromRecordHits(t *testing.T) {
 		if count > 1 {
 			t.Errorf("%s appears %d times; a hit is a record, not a line", hit, count)
 		}
+	}
+}
+
+func TestGrepRejectsAMissingScope(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+	if code, _, _ := runIn(t, repo, "grep", "rate limit"); code == exitOK {
+		t.Error("grep with no --for was accepted")
+	}
+}
+
+// grep and search must reject a bare `decisions` coordinate the same way: a
+// usage finding that points at `map --for decisions`. The message text itself
+// names the calling command ("grep needs one" / "search needs one" — the
+// design's own chosen wording, verbatim), so this asserts what the design's
+// own Testing Strategy prescribes for this case (Code + Contains), not a
+// byte-for-byte match across commands.
+func TestBareDecisionsIsRejectedIdenticallyByBothCommands(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+
+	for _, command := range []string{"grep", "search"} {
+		t.Run(command, func(t *testing.T) {
+			code, _, stderr := runIn(t, repo, command, "anything", "--for", "decisions")
+			if code == exitOK {
+				t.Fatalf("%s --for decisions was accepted", command)
+			}
+			result := decode[finding.Finding](t, stderr)
+			if result.Code != finding.CodeUsage {
+				t.Errorf("code = %q, want %q", result.Code, finding.CodeUsage)
+			}
+			if !strings.Contains(result.Message, "map --for decisions") {
+				t.Errorf("%s message does not point at `map --for decisions`: %q", command, result.Message)
+			}
+			if !strings.Contains(result.Message, command) {
+				t.Errorf("%s message does not name its own command: %q", command, result.Message)
+			}
+		})
+	}
+}
+
+// A bare `decisions` coordinate must be rejected the same way regardless of
+// how many components are declared — the check is a structural property of
+// the coordinate, not a lookup against the component list.
+func TestBareDecisionsIsRejectedWithZeroComponentsDeclared(t *testing.T) {
+	repo := project(t) // no `component add` at all
+
+	for _, command := range []string{"grep", "search"} {
+		t.Run(command, func(t *testing.T) {
+			code, _, stderr := runIn(t, repo, command, "anything", "--for", "decisions")
+			if code == exitOK {
+				t.Fatalf("%s --for decisions was accepted with no components declared", command)
+			}
+			result := decode[finding.Finding](t, stderr)
+			if result.Code != finding.CodeUsage {
+				t.Errorf("code = %q, want %q", result.Code, finding.CodeUsage)
+			}
+			if !strings.Contains(result.Message, "map --for decisions") {
+				t.Errorf("%s message does not point at `map --for decisions`: %q", command, result.Message)
+			}
+		})
+	}
+}
+
+// lookupCoordinate treats a blank --for the same as an absent one:
+// strings.TrimSpace(raw) == "" covers both "" and whitespace-only, but until
+// now only the omitted-flag path (default "") had a test.
+func TestBlankScopeIsTreatedAsAbsent(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+
+	for _, command := range []string{"grep", "search"} {
+		for _, blank := range []string{"", "   "} {
+			t.Run(command+"/"+blank, func(t *testing.T) {
+				code, _, stderr := runIn(t, repo, command, "anything", "--for", blank)
+				if code == exitOK {
+					t.Fatalf("%s --for %q was accepted", command, blank)
+				}
+				result := decode[finding.Finding](t, stderr)
+				if result.Code != finding.CodeUsage {
+					t.Errorf("code = %q, want %q", result.Code, finding.CodeUsage)
+				}
+				if !strings.Contains(result.Message, "needs --for") {
+					t.Errorf("%s message does not read as the absent-flag error: %q", command, result.Message)
+				}
+			})
+		}
+	}
+}
+
+// specs stays untouched by this change — a specs coordinate must keep
+// working under both commands, at more than one depth. Until now only `map`
+// was ever driven against a specs coordinate in this package's tests.
+func TestGrepAndSearchWorkUnderASpecsCoordinate(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+
+	body := "## Flow\n\nA visitor registers through a rate-limited signup form.\n"
+	writeRecord(t, filepath.Join(repo, store.Root, "specs", "flow", "signup.md"),
+		"---\ntitle: User signup\ndescription: A visitor registers.\nstatus: accepted\ncomponents: [api]\nbody-hash: "+store.BodyHash(body)+"\n---\n\n"+body)
+
+	for _, coordinate := range []string{"specs", "specs/flow"} {
+		t.Run(coordinate, func(t *testing.T) {
+			grepReport := decode[grepReport](t, mustRun(t, repo, "grep", "rate-limited", "--for", coordinate))
+			if len(grepReport.Matches) == 0 {
+				t.Fatalf("grep --for %s found nothing", coordinate)
+			}
+
+			searchReport := decode[searchReport](t, mustRun(t, repo, "search", "rate-limited", "--for", coordinate))
+			if len(searchReport.Matches) == 0 {
+				t.Fatalf("search --for %s found nothing", coordinate)
+			}
+		})
 	}
 }
 
@@ -319,17 +433,19 @@ func TestSearchRejectsAMissingOrBlankTerm(t *testing.T) {
 	})
 }
 
-// With no components declared — this repository's own state before anything
-// is registered — the semantic pass has no collection to query, and search
-// must return exactly what grep returns for the same term and coordinate.
-func TestSearchWithNoComponentsMatchesGrep(t *testing.T) {
+// With no qmd binary on PATH at all, the semantic pass cannot contribute
+// anything, and search must return exactly what grep returns for the same
+// term and coordinate.
+func TestSearchWithoutASemanticPassMatchesGrep(t *testing.T) {
 	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+	stubQmd(t, "")
 
-	grepReport := decode[grepReport](t, mustRun(t, repo, "grep", "anything", "--for", "decisions"))
-	searchReport := decode[searchReport](t, mustRun(t, repo, "search", "anything", "--for", "decisions"))
+	grepReport := decode[grepReport](t, mustRun(t, repo, "grep", "anything", "--for", "decisions/api"))
+	searchReport := decode[searchReport](t, mustRun(t, repo, "search", "anything", "--for", "decisions/api"))
 
 	if searchReport.Semantic != "unavailable" {
-		t.Errorf("semantic = %q, want unavailable with no components declared", searchReport.Semantic)
+		t.Errorf("semantic = %q, want unavailable with no qmd on PATH", searchReport.Semantic)
 	}
 	if searchReport.Omitted != 0 {
 		t.Errorf("omitted = %d, want 0", searchReport.Omitted)

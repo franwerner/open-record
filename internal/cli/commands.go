@@ -79,7 +79,7 @@ var commands = []*Command{
 	{
 		Name:    "grep",
 		Summary: "Literal search, scoped to a coordinate.",
-		Usage:   "openrecord grep TERM [--for COORDINATE]",
+		Usage:   "openrecord grep TERM --for COORDINATE",
 		Flags:   describes(coordinateFlag),
 		Run:     runGrep,
 	},

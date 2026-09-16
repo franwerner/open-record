@@ -88,41 +88,6 @@ esac
 	}
 }
 
-// TestSearchFansOutAcrossComponents drives `--for decisions` — the root of
-// the decisions store — and checks that hits from two different components'
-// collections both come back, each rooted at its own component.
-func TestSearchFansOutAcrossComponents(t *testing.T) {
-	repo := project(t)
-	env := stubQmd(t, `
-case "$1" in
-  capabilities) echo '{"schemaVersion":1,"embed":{"available":true}}'; exit 0 ;;
-  query) echo '[{"file":"qmd://project-decisions-cli/contracts/output-contract.md","line":1,"snippet":"cli surface"},{"file":"qmd://project-decisions-web/structure/state-ownership.md","line":1,"snippet":"web surface"}]'; exit 0 ;;
-  *) exit 0 ;;
-esac
-`)
-
-	code, stdout, stderr := runWith(t, repo, env, "search", "an unrelated phrase found by meaning alone", "--for", "decisions")
-	if code != exitOK {
-		t.Fatalf("search failed: %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
-	}
-	report := decode[searchReport](t, stdout)
-
-	want := map[string]bool{
-		"decisions/cli/contracts/output-contract.md": false,
-		"decisions/web/structure/state-ownership.md": false,
-	}
-	for _, match := range report.Matches {
-		if _, ok := want[match.Path]; ok {
-			want[match.Path] = true
-		}
-	}
-	for path, seen := range want {
-		if !seen {
-			t.Errorf("%s from a fanned-out collection is missing: %+v", path, report.Matches)
-		}
-	}
-}
-
 // TestSearchMergePrefersTheLiteralEntry uses a term that is genuinely in a
 // real record's text, and a stub that also claims to have found the same
 // path by meaning with fabricated line/snippet/hits — checking the merged

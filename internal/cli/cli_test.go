@@ -175,3 +175,27 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 	}
 	walk("", commands)
 }
+
+// grep's Usage string must present --for as required, unbracketed, the same
+// shape as search's — a revert to the old [--for COORDINATE] form would go
+// unnoticed otherwise, since nothing else asserts this literal content.
+func TestGrepUsagePresentsForAsRequired(t *testing.T) {
+	grep := find(commands, "grep")
+	if grep == nil {
+		t.Fatal("grep is not registered")
+	}
+	if strings.Contains(grep.Usage, "[--for") {
+		t.Errorf("grep's usage still brackets --for as optional: %q", grep.Usage)
+	}
+	if !strings.Contains(grep.Usage, "--for COORDINATE") {
+		t.Errorf("grep's usage does not present --for COORDINATE: %q", grep.Usage)
+	}
+
+	search := find(commands, "search")
+	if search == nil {
+		t.Fatal("search is not registered")
+	}
+	if !strings.Contains(search.Usage, "--for COORDINATE") {
+		t.Errorf("search's usage does not present --for COORDINATE, so it is not the shape grep's was matched to: %q", search.Usage)
+	}
+}

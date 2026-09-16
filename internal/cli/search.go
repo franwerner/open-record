@@ -60,10 +60,11 @@ type collectionScope struct {
 }
 
 // collectionsFor resolves a --for coordinate to the set of qmd collections
-// that cover it, per the ratified table: `decisions` fans out to one
-// collection per declared component, `decisions/<c>[...]` and `specs[...]`
-// each name exactly one. An empty result means no collection covers this
-// coordinate at all — the caller short-circuits both qmd subprocesses on that.
+// that cover it: `decisions/<c>[...]` and `specs[...]` each name exactly one.
+// A bare `decisions` coordinate never reaches here — lookupCoordinate rejects
+// it before any lookup runs — so an empty result means no collection covers
+// this coordinate at all, and the caller short-circuits both qmd subprocesses
+// on that.
 //
 // Each scope's Coordinate is where the *collection* is rooted — a component's
 // decisions, or the whole specs store — never the (possibly deeper) requested
@@ -71,18 +72,9 @@ type collectionScope struct {
 // it is fixed by how the collection was registered, not by how far this one
 // query descended into it. Filtering to the requested subtree happens
 // afterward, against the coordinate actually asked for.
-func collectionsFor(project string, components []string, coordinate store.Coordinate) []collectionScope {
+func collectionsFor(project string, coordinate store.Coordinate) []collectionScope {
 	switch {
-	case coordinate.Kind == store.Decisions && coordinate.Depth() == 0:
-		scopes := make([]collectionScope, 0, len(components))
-		for _, component := range components {
-			scopes = append(scopes, collectionScope{
-				Name:       qmd.DecisionsCollection(project, component),
-				Coordinate: (store.Coordinate{Kind: store.Decisions, Segments: []string{component}}).String(),
-			})
-		}
-		return scopes
-	case coordinate.Kind == store.Decisions:
+	case coordinate.Kind == store.Decisions && coordinate.Depth() > 0:
 		return []collectionScope{{
 			Name:       qmd.DecisionsCollection(project, coordinate.Segments[0]),
 			Coordinate: (store.Coordinate{Kind: store.Decisions, Segments: []string{coordinate.Segments[0]}}).String(),
@@ -111,10 +103,7 @@ func runSearch(env Env, args []string) error {
 	if strings.TrimSpace(term) == "" {
 		return Errorf(finding.CodeUsage, "a search needs a term")
 	}
-	if strings.TrimSpace(*options.where) == "" {
-		return Errorf(finding.CodeUsage, "search needs --for: there is no unscoped search")
-	}
-	coordinate, err := store.ParseCoordinate(*options.where)
+	coordinate, err := lookupCoordinate("search", *options.where)
 	if err != nil {
 		return err
 	}
@@ -143,11 +132,7 @@ func runSearch(env Env, args []string) error {
 // to handle: only the literal pass can fail this command outright.
 func runSemanticPass(env Env, coordinate store.Coordinate, term string) (string, []Match) {
 	project := filepath.Base(env.Repo)
-	var components []string
-	if declared, err := store.LoadComponents(env.Repo); err == nil {
-		components = declared.IDs()
-	}
-	scopes := collectionsFor(project, components, coordinate)
+	scopes := collectionsFor(project, coordinate)
 	if len(scopes) == 0 {
 		return "unavailable", nil
 	}

@@ -102,6 +102,7 @@ func TestSkillsShowTheFlagsTheirExamplesNeed(t *testing.T) {
 	// would start asserting style rather than correctness.
 	required := map[string][]string{
 		"record write": {"--body-file"},
+		"grep":         {"--for"},
 		"search":       {"--for"},
 	}
 	// A spec write additionally needs --components, and only a spec does — so it
@@ -432,5 +433,116 @@ func TestSearchIsThePublishedLookupCommand(t *testing.T) {
 				t.Errorf("%s instructs translating a qmd:// URL by hand: %q", name, strings.TrimSpace(line))
 			}
 		}
+	}
+}
+
+// TestCliDocsStateBothForRules guards the spec scenario "the CLI reference
+// documents both rules". TestDocumentedFlagsExist only checks that --for is
+// named as a flag somewhere; it says nothing about --for being required or
+// about the bare-`decisions` rejection. Both the grep and search sections
+// must state both rules, and point a reader at `map --for decisions`.
+func TestCliDocsStateBothForRules(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "cli.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	documented := string(raw)
+
+	// section extracts the prose between a top-level heading and the next
+	// one, so the check is scoped to that command's own section rather than
+	// to the whole document.
+	section := func(heading string) string {
+		start := strings.Index(documented, heading)
+		if start == -1 {
+			t.Fatalf("docs/cli.md has no %q section", heading)
+		}
+		rest := documented[start+len(heading):]
+		if end := strings.Index(rest, "\n## "); end != -1 {
+			rest = rest[:end]
+		}
+		return rest
+	}
+
+	required := regexp.MustCompile("(?i)`--for`\\s+is\\s+\\*\\*required\\*\\*")
+	bareDecisions := regexp.MustCompile("(?i)bare\\s+`decisions`")
+	// map and --for and decisions can wrap onto different lines in the
+	// rendered prose, so whitespace between them is not just a single space.
+	pointer := regexp.MustCompile(`map\s+--for\s+decisions`)
+
+	for _, heading := range []string{"## `grep`", "## `search`"} {
+		body := section(heading)
+		if !required.MatchString(body) {
+			t.Errorf("%s section does not state that --for is required", heading)
+		}
+		if !bareDecisions.MatchString(body) {
+			t.Errorf("%s section does not mention the bare `decisions` rejection", heading)
+		}
+		if !pointer.MatchString(body) {
+			t.Errorf("%s section does not point a reader at `map --for decisions`", heading)
+		}
+	}
+}
+
+// TestRepositoryHasNoRejectedCallForm guards the spec scenario "the
+// repository is free of rejected call forms". Task 4.3 verified this with a
+// one-time manual sweep; this pins it as a regression test so a future
+// example can't silently regress to a form the CLI itself now rejects.
+//
+// Scoped to the literal `openrecord grep`/`openrecord search` invocation
+// text that appears in docs, skills, shell scripts and Go usage strings —
+// not to Go function-call argument lists. `_test.go` files are excluded
+// entirely: several tests deliberately invoke the rejected forms (a bare
+// `--for decisions`, or no `--for` at all) to assert they are rejected, and
+// those calls pass args as separate tokens (`"--for", "decisions"`), which
+// this literal-text check would never have matched anyway. Usage-string
+// placeholders (`--for COORDINATE`) and the pointer text inside the error
+// messages themselves (`openrecord map --for decisions`) are excluded by
+// construction: the former never spells out `decisions`, and the latter
+// names `map`, not `grep`/`search`.
+func TestRepositoryHasNoRejectedCallForm(t *testing.T) {
+	root := filepath.Join("..", "..")
+	invocation := regexp.MustCompile(`openrecord (grep|search) `)
+	// Matches a bare `decisions` coordinate right after --for: the next
+	// character (if any) must not continue it into `decisions/<component>`,
+	// which is the accepted form.
+	bareDecisions := regexp.MustCompile(`--for[ =]decisions(?:[^/\w]|$)`)
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			if info.Name() == ".git" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		switch filepath.Ext(path) {
+		case ".go", ".md", ".sh":
+		default:
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		for number, line := range strings.Split(string(raw), "\n") {
+			if !invocation.MatchString(line) {
+				continue
+			}
+			if bareDecisions.MatchString(line) {
+				t.Errorf("%s:%d invokes grep/search with a bare `decisions` coordinate: %s", path, number+1, strings.TrimSpace(line))
+			}
+			if !strings.Contains(line, "--for") {
+				t.Errorf("%s:%d invokes grep/search without --for: %s", path, number+1, strings.TrimSpace(line))
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
 	}
 }

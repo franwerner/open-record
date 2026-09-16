@@ -371,6 +371,10 @@ openrecord grep "rate limit" --for decisions/api
   decisions/api/security/INDEX.md                       [group]   line 3,  1 hit
 ```
 
+`--for` is **required** — there is no unscoped search. A bare `decisions` coordinate — the decisions
+root, with no component named — is rejected too: a decision governs exactly one component, so `grep`
+needs one named. `openrecord map --for decisions` lists the declared components.
+
 ### One entry per file, not per line
 
 A record that says the term six times is still one record, and one thing to go and read. Reporting a
@@ -405,8 +409,10 @@ openrecord search "rate limit" --for decisions/api
 openrecord search "rate limit" --for decisions/api --omit decisions/api/security/rate-limits/at-the-gateway.md
 ```
 
-`--for` is **required** — there is no unscoped search. `--omit` may be repeated, each occurrence naming
-one path exactly as `matches[].path` reports it; a path containing a comma is kept whole, never split.
+`--for` is **required** — there is no unscoped search. A bare `decisions` coordinate is rejected too, for
+the same reason `grep` rejects it: a decision governs exactly one component, and `openrecord map --for
+decisions` is what lists the ones declared. `--omit` may be repeated, each occurrence naming one path
+exactly as `matches[].path` reports it; a path containing a comma is kept whole, never split.
 
 ### One entry per path, never a rank
 
