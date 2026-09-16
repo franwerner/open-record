@@ -30,7 +30,7 @@ BASE_URL="${BASE_URL:-https://github.com/$REPO/releases/download}"
 tmp=""
 # Kept in step with internal/qmd/qmd.go by hand — the binary and this script are
 # the two places that name a qmd release, and they have to agree.
-QMD_VERSION="2.8.3-mate.5"
+QMD_VERSION="2.8.3-mate.7"
 QMD_SOURCE="https://github.com/franwerner/qmd/releases/download/v${QMD_VERSION}/tobilu-qmd-${QMD_VERSION}.tgz"
 
 # Always returns 0: a trap that ends on a non-zero status makes a successful

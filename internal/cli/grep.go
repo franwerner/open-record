@@ -55,17 +55,28 @@ func runGrep(env Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	files, _, err := store.Walk(env.Repo, coordinate)
+	matches, err := literalMatches(env.Repo, coordinate, term)
 	if err != nil {
 		return err
+	}
+	return env.WriteJSON(grepReport{Term: term, For: coordinate.String(), Matches: matches})
+}
+
+// literalMatches runs the case-insensitive scan `grep` and `search` share: walk
+// the coordinate, and report one Match per file, carrying the first matching
+// line as the evidence and the count as the weight.
+func literalMatches(repo string, coordinate store.Coordinate, term string) ([]Match, error) {
+	files, _, err := store.Walk(repo, coordinate)
+	if err != nil {
+		return nil, err
 	}
 
 	needle := strings.ToLower(term)
 	matches := []Match{}
 	for _, file := range files {
-		found, err := grepFile(filepath.Join(env.Repo, store.Root, filepath.FromSlash(file.Path)), needle)
+		found, err := grepFile(filepath.Join(repo, store.Root, filepath.FromSlash(file.Path)), needle)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if len(found) == 0 {
 			continue
@@ -82,7 +93,7 @@ func runGrep(env Env, args []string) error {
 		first.Hits = len(found)
 		matches = append(matches, first)
 	}
-	return env.WriteJSON(grepReport{Term: term, For: coordinate.String(), Matches: matches})
+	return matches, nil
 }
 
 func grepFile(path, needle string) ([]Match, error) {

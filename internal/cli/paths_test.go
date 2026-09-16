@@ -102,6 +102,7 @@ func TestSkillsShowTheFlagsTheirExamplesNeed(t *testing.T) {
 	// would start asserting style rather than correctness.
 	required := map[string][]string{
 		"record write": {"--body-file"},
+		"search":       {"--for"},
 	}
 	// A spec write additionally needs --components, and only a spec does — so it
 	// is keyed on the path the example writes to rather than on the command.
@@ -294,6 +295,122 @@ func TestDocumentedFlagsExist(t *testing.T) {
 		for _, flag := range mentioned.FindAllString(block, -1) {
 			if !known[flag] {
 				t.Errorf("docs/cli.md shows `%s`, which no command accepts:\n  %s", flag, block)
+			}
+		}
+	}
+}
+
+// TestPublishedArchitectureIsConsistentAboutQmd guards the claim the whole
+// search reconciliation rests on: docs/cli.md, INTEGRATION.md, both affected
+// skills and the internal/qmd package doc all describe the same relationship
+// with qmd. Pinning the exact reconciled wording would break on every honest
+// rephrasing, so this checks the one thing that actually matters — none of
+// them asserts the superseded, now-false claim that the binary never
+// calls/runs/executes qmd at all (search's meaning half genuinely does, as a
+// subprocess) — and that no internal Go symbol leaked into a user-facing
+// surface.
+func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
+	sites := map[string]string{}
+	for name, path := range map[string]string{
+		"docs/cli.md":                        filepath.Join("..", "..", "docs", "cli.md"),
+		"INTEGRATION.md":                     filepath.Join("..", "..", "INTEGRATION.md"),
+		"skills/openrecord-consult/SKILL.md": filepath.Join("..", "..", "skills", "openrecord-consult", "SKILL.md"),
+		"skills/openrecord-mine/SKILL.md":    filepath.Join("..", "..", "skills", "openrecord-mine", "SKILL.md"),
+		"internal/qmd package doc":           filepath.Join("..", "qmd", "qmd.go"),
+	} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sites[name] = string(raw)
+	}
+
+	// The claim this reconciliation superseded: an unqualified denial that the
+	// binary ever calls/runs/executes qmd (or "the semantic/meaning tool")
+	// at all. That was true before this change and is false after it.
+	superseded := regexp.MustCompile(`(?i)never (calls?|runs?|executes?|invokes?) (qmd|the (semantic|meaning) (tool|half|search))\b`)
+	for name, text := range sites {
+		if match := superseded.FindString(text); match != "" {
+			t.Errorf("%s states the superseded claim %q — search's meaning half genuinely executes qmd as a subprocess", name, match)
+		}
+	}
+
+	// No internal Go symbol belongs in a user-facing surface. The package doc
+	// is excluded: it is internal by definition and names its own package's
+	// symbols legitimately.
+	symbols := []string{
+		"runSearch", "runSemanticPass", "literalMatches", "collectionsFor",
+		"searchReport", "collectionScope", "ReadCapabilities(", "qmd.Query(",
+		"underCoordinate", "normalizeOmit", "omitFrom(",
+	}
+	for name, text := range sites {
+		if name == "internal/qmd package doc" {
+			continue
+		}
+		for _, symbol := range symbols {
+			if strings.Contains(text, symbol) {
+				t.Errorf("%s names the internal symbol %q, which is not this product's surface", name, symbol)
+			}
+		}
+	}
+}
+
+// TestSearchIsThePublishedLookupCommand guards the spec scenario "A calling
+// agent follows the published instructions": an agent looking for the
+// records that govern a piece of work is told to run `openrecord search`,
+// never `qmd` itself, and never to translate a `qmd://` URL by hand.
+//
+// skills/openrecord-setup-search/SKILL.md is deliberately excluded — it
+// legitimately shows direct `qmd query` examples for registering a store,
+// which is not a lookup step.
+func TestSearchIsThePublishedLookupCommand(t *testing.T) {
+	sites := map[string]string{}
+	for name, path := range map[string]string{
+		"docs/cli.md":                        filepath.Join("..", "..", "docs", "cli.md"),
+		"INTEGRATION.md":                     filepath.Join("..", "..", "INTEGRATION.md"),
+		"skills/openrecord-consult/SKILL.md": filepath.Join("..", "..", "skills", "openrecord-consult", "SKILL.md"),
+		"skills/openrecord-mine/SKILL.md":    filepath.Join("..", "..", "skills", "openrecord-mine", "SKILL.md"),
+	} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		sites[name] = string(raw)
+	}
+
+	// Presence: each site shows the agent an `openrecord search TERM --for
+	// ...` invocation — the lookup command itself, not a description of it.
+	invocation := regexp.MustCompile(`openrecord search ["“][^"”\n]+["”]\s+--for\s`)
+	for name, text := range sites {
+		if !invocation.MatchString(text) {
+			t.Errorf("%s never shows an `openrecord search TERM --for ...` invocation — an agent reading it is not told to run search", name)
+		}
+	}
+
+	// Absence: never a lookup step invoking qmd itself, unqualified by
+	// `openrecord `. `openrecord qmd status`/`install` is the legitimate
+	// reporting/install subcommand and does not match this.
+	directQmd := regexp.MustCompile(`(^|[^a-zA-Z])qmd (query|search)\b`)
+	for name, text := range sites {
+		if match := directQmd.FindString(text); match != "" {
+			t.Errorf("%s tells an agent to invoke %q directly as a lookup step — the lookup command is `openrecord search`, not qmd itself", name, strings.TrimSpace(match))
+		}
+	}
+
+	// Absence: never an instruction to translate a `qmd://` URL into a store
+	// coordinate by hand. A line naming `qmd://` alongside a directive verb,
+	// with no negation in the same line, reads as such an instruction —
+	// distinguishing it from a line that states the absence, like
+	// INTEGRATION.md's "never a `qmd://` URL to translate by hand".
+	directive := regexp.MustCompile(`(?i)\b(strip|translate|convert|parse)\b`)
+	negated := regexp.MustCompile(`(?i)\b(never|no|not|n't|nowhere)\b`)
+	for name, text := range sites {
+		for _, line := range strings.Split(text, "\n") {
+			if !strings.Contains(line, "qmd://") {
+				continue
+			}
+			if directive.MatchString(line) && !negated.MatchString(line) {
+				t.Errorf("%s instructs translating a qmd:// URL by hand: %q", name, strings.TrimSpace(line))
 			}
 		}
 	}

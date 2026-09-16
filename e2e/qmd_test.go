@@ -40,10 +40,18 @@ case "$1" in
 esac
 `
 
+// query answers with a valid, empty result on purpose: this stub's whole
+// reason for existing here is to isolate the capabilities read as the one
+// point of failure, and a query that also failed to parse would report
+// "unavailable" instead, masking the "lexical-only" case this is for. It has
+// no `capabilities` arm at all — the fallback below answers with `exit 0` and
+// no output, which is not valid JSON, and is exactly what a qmd release that
+// predates the subcommand does for anything it does not recognise.
 const workingQmd = `
 case "$1" in
   --version|-v) echo "qmd 2.8.3-mate.4 (e5171c6)"; exit 0 ;;
   status) echo "QMD Status"; echo "Index: /tmp/index.sqlite"; exit 0 ;;
+  query) echo "[]"; exit 0 ;;
   *) exit 0 ;;
 esac
 `
@@ -188,5 +196,23 @@ func TestQmdStatusNamesTheCollectionsWithoutQmd(t *testing.T) {
 	}
 	if strings.Join(report.Needs, ",") != strings.Join(want, ",") {
 		t.Errorf("collections = %v, want %v", report.Needs, want)
+	}
+}
+
+// workingQmd ends in `*) exit 0`, so it answers `capabilities --json` with
+// exit 0 and no output at all — which does not parse as JSON. This is the
+// real shape of any qmd release that predates the subcommand and simply does
+// not recognise it as a flag-carrying invocation deserving a jq-shaped
+// answer. Stated explicitly, since the failure mode this whole design guards
+// against is exactly this reading silently as "used".
+func TestSearchWithNoCapabilitiesSubcommandPinsToLexicalOnly(t *testing.T) {
+	repo := project(t)
+	code, stdout, stderr := runWith(t, repo, stubQmd(t, workingQmd), "search", "anything", "--for", "decisions/api")
+	if code != exitOK {
+		t.Fatalf("search failed: %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	report := decode[searchReport](t, stdout)
+	if report.Semantic != "lexical-only" {
+		t.Errorf("semantic = %q, want lexical-only — workingQmd has no capabilities arm at all", report.Semantic)
 	}
 }

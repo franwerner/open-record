@@ -164,7 +164,7 @@ and they state the decision, so a duplicate is visible there even when its wordi
 Better, ask by meaning rather than by wording:
 
 ```
-qmd query "how request limits are applied" -c <project>-decisions-api
+openrecord search "how request limits are applied" --for decisions/api
 ```
 
 This is the one step where semantic search is doing work nothing else can: it is looking for a record

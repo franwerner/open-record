@@ -36,7 +36,7 @@ binary.
 
 Writing your own copies is the tempting move and the wrong one. The skills encode behaviour that the
 store's shape depends on — which level accepts which kind of prose, that a subgroup is never nested,
-that `openrecord grep` is literal and needs a second pass by meaning. A private copy drifts from the
+that `openrecord search` reports which of its two passes actually ran. A private copy drifts from the
 binary silently, and the first symptom is a store that fails `validate` for reasons nobody can trace.
 
 `--with-qmd` is not decoration: without it, no emitted skill mentions semantic search at all. An agent
@@ -116,29 +116,30 @@ it authorises nothing either. An agent that reads `pending` as "so I can choose"
 mandate. If the work depends on that question being settled, that is worth saying out loud, which is
 itself a useful thing for the person to hear.
 
-## Finding the record is four moves, not one
+## Finding the record is three moves, not one
 
 The most common integration mistake is wiring up semantic search and calling the retrieval problem
-solved. `openrecord-consult` uses four distinct moves, and each one catches what the others miss:
+solved. `openrecord-consult` uses three distinct moves, and each one catches what the others miss:
 
 1. **Descend the store's own index.** `openrecord component owners <path>` maps a file to the surface
    that owns it; `openrecord map --for decisions/<component>` lists its concerns *with the description
-   of when to descend into each*. This is the only move that works when you do not yet know what you
-   are looking for.
-2. **Literal search.** `openrecord grep "<term>" --for decisions` finds a record when you remember its
-   wording. Fast, exact, and blind to synonyms — which is precisely when the next move earns its place.
-3. **Search by meaning.** With qmd registered, `qmd query "<question>" -c <project>-decisions-<component>`
-   finds the record whose words you do not know. This is the usual case: a question asked in the words
-   of the task rarely matches the words of a record written months earlier by someone else.
-4. **Follow the links.** Records cite each other with `[[slug]]`. In practice a large share of the
+   of when to descend into each*. This is the only move that enumerates, and the only one that works
+   when you do not yet know what you are looking for.
+2. **Search.** `openrecord search "<term>" --for decisions/<component>` runs both passes in one call:
+   the literal one, exact and blind to synonyms, and — when qmd reports an embedding model — a pass by
+   meaning over the same scope. It hands back store paths, never a `qmd://` URL to translate by hand,
+   and it says which passes actually ran. Give it `--omit` for the paths the descent already surfaced
+   and it leaves them out. The meaning pass is what earns the command its place: a question asked in
+   the words of the task rarely matches the words of a record written months earlier by someone else.
+3. **Follow the links.** Records cite each other with `[[slug]]`. In practice a large share of the
    relevant records are reached not by any search but by following a link out of the first one found.
    An ecosystem that stops at the first hit systematically misses the records that depend on it.
 
 A worked example from a real store: a question posed as *"what stops two consultations of the same
 professional from overlapping"* against a store whose records say *turno* and *médico* — no shared
-vocabulary at all. Index descent narrowed it to one concern, literal grep found nothing, semantic
-search surfaced the governing decision, and two of the four relevant records arrived by following links
-out of it. Any single move on its own would have returned less than the whole answer.
+vocabulary at all. Index descent narrowed it to one concern, the search's literal pass found nothing
+there, its meaning pass surfaced the governing decision, and two of the four relevant records arrived
+by following links out of it. Any single move on its own would have returned less than the whole answer.
 
 ### Report how each record surfaced
 
@@ -146,7 +147,7 @@ When an agent reports what governs a piece of work, each record should carry how
 
 ```
 decisions/agenda/domain-logic/no-solapamiento-en-la-base.md   [accepted]
-  Surfaced by: index descent (agenda/domain-logic) + semantic search
+  Surfaced by: index descent (agenda/domain-logic) + search
 
 specs/flow/reserva-de-turno.md                                [accepted]
   Surfaced by: link from the no-overlap decision

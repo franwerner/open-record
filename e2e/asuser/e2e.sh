@@ -329,23 +329,44 @@ fi
 check "$(qmd doctor 2>&1 | grep -c 'search provider: answered every call')" "1" "después de embeber, el proveedor respondió"
 
 step "11. Las búsquedas: ¿devuelven lo correcto?"
+# Una sola llamada corre las dos pasadas. Lo que se comprueba no es que algo
+# vuelva, sino que vuelva EL record, como coordenada del store, y que el
+# envelope diga honestamente qué mitades corrieron.
 Q='what keeps a retried request from charging twice'
 note "pregunta: $Q"
-check "$(jval 'print(len(d["matches"]))' openrecord grep 'retried' --for decisions)" "0" "el literal no encuentra nada — no está esa palabra"
-top="$(jval 'print(d[0]["file"] if d else "nada")' qmd vsearch "$Q" -c work-decisions-api -c work-specs --format json)"
-note "primer resultado semántico: $top"
-check "$(printf '%s' "$top" | grep -c 'idempotency-key-required\|idempotent-writes')" "1" "y el semántico devuelve EL record correcto"
+check "$(jval 'print(len(d["matches"]))' openrecord grep 'retried' --for decisions)" "0" "el literal solo no encuentra nada — no está esa palabra"
+r="$(openrecord search "$Q" --for decisions/api 2>/dev/null)"
+note "semantic: $(jstr 'print(d["semantic"])' "$r")  ·  $(jstr 'print(len(d["matches"]))' "$r") resultado(s)"
+check "$(jstr 'print(d["semantic"])' "$r")" "used" "las dos pasadas corrieron — hay modelo de embeddings"
+check "$(jstr 'print(any("idempotency-key-required" in m["path"] for m in d["matches"]))' "$r")" \
+      "True" "y el record correcto está entre los resultados"
+check "$(jstr 'print(any(m["path"].startswith("qmd://") for m in d["matches"]))' "$r")" \
+      "False" "ninguna ruta vuelve como URL de qmd — el binario ya las tradujo"
 Q2='why a queue was rejected for background work'
-top2="$(jval 'print(d[0]["file"] if d else "nada")' qmd vsearch "$Q2" -c work-decisions-worker --format json)"
-note "pregunta: $Q2  →  $top2"
-check "$top2" "qmd://work-decisions-worker/runtime/scheduled-in-process-jobs.md" "una consulta acotada a una superficie devuelve la suya"
+r2="$(openrecord search "$Q2" --for decisions/worker 2>/dev/null)"
+# Sin "el primer resultado": search ordena por ruta y nunca puntúa, así que el
+# primero no es el más relevante — decirlo invita a leerlo como un ranking.
+note "pregunta: $Q2  →  $(jstr 'print(d["semantic"])' "$r2")  ·  $(jstr 'print(len(d["matches"]))' "$r2") resultado(s)"
+check "$(jstr 'print(all(m["path"].startswith("decisions/worker/") for m in d["matches"]) and len(d["matches"]) > 0)' "$r2")" \
+      "True" "una consulta acotada a una superficie devuelve solo la suya"
+check "$(jstr 'print(d["omitted"])' "$(openrecord search "$Q" --for decisions/api --omit decisions/api/security/idempotency-key-required.md 2>/dev/null)")" \
+      "1" "--omit resta lo que el descenso ya había traído"
 
 step "12. Proveedor caído: no puede parecer un resultado vacío"
 bad_key() { QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA "$@" >/dev/null 2>&1; echo $?; }
 QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA qmd vsearch "$Q" -c work-specs 2>&1 | tail -2 | sed 's/^/    /'
-check "$(bad_key qmd vsearch "$Q" -c work-specs)" "1" "la búsqueda sale 1"
+check "$(bad_key qmd vsearch "$Q" -c work-specs)" "1" "la búsqueda de qmd sale 1"
 check "$(bad_key qmd vsearch "$Q" -c work-specs --format json)" "1" "y también con --format json"
 check "$(bad_key qmd doctor)" "1" "qmd doctor sale 1"
+# openrecord no hereda esa caída: degrada, sigue devolviendo lo literal, y no
+# afirma haber buscado por significado. Un resultado que miente sobre su
+# alcance es peor que uno vacío.
+# `bad` es el contador de fallas de este script — no pisarlo.
+degraded="$(QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA openrecord search 'idempotency' --for decisions/api 2>/dev/null)"
+check "$(bad_key openrecord search 'idempotency' --for decisions/api)" "0" "openrecord search no falla por el proveedor"
+check "$(jstr 'print(d["semantic"] in ("lexical-only", "unavailable"))' "$degraded")" \
+      "True" "y no afirma haber buscado por significado"
+check "$(jstr 'print(len(d["matches"]) > 0)' "$degraded")" "True" "los hits literales igual vuelven"
 check "$(rc qmd search 'zzzznoexistezzzz' -c work-specs)" "0" "una búsqueda sana que no encuentra nada sale 0"
 
 step "13. Estado final"

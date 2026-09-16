@@ -195,6 +195,20 @@ type (
 		For     string      `json:"for"`
 		Matches []grepMatch `json:"matches"`
 	}
+	searchMatch struct {
+		Path string `json:"path"`
+		Kind string `json:"kind"`
+		Line int    `json:"line"`
+		Text string `json:"text"`
+		Hits int    `json:"hits"`
+	}
+	searchReport struct {
+		Term     string        `json:"term"`
+		For      string        `json:"for"`
+		Semantic string        `json:"semantic"`
+		Omitted  int           `json:"omitted"`
+		Matches  []searchMatch `json:"matches"`
+	}
 	ownersReport struct {
 		Path     string   `json:"path"`
 		Owner    *string  `json:"owner"`

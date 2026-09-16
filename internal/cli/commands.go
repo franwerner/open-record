@@ -84,6 +84,13 @@ var commands = []*Command{
 		Run:     runGrep,
 	},
 	{
+		Name:    "search",
+		Summary: "Literal search plus meaning, scoped to a coordinate, merged into one list.",
+		Usage:   "openrecord search TERM --for COORDINATE [--omit PATH]",
+		Flags:   describes(searchFlags),
+		Run:     runSearch,
+	},
+	{
 		Name:    "diagram",
 		Summary: "Emit a spec as Mermaid on stdout.",
 		Usage:   "openrecord diagram PATH",

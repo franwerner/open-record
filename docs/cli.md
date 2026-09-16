@@ -10,14 +10,17 @@ judgement is a document a host's agent reads, never something the binary decides
 **JSON on stdout, by default.** The primary consumer is an agent, so the machine-readable form is the
 default and the human view is the flag — not the other way round.
 
-**It never calls a model.** A framework that decided which records govern a piece of work would need
-one, and would stop being a framework about a format.
+**It calls no model to decide.** `search`'s meaning half does run a model — qmd's embedding model,
+executed as a subprocess — but that model **is** the meaning half, not a judgement about which records
+govern a piece of work. No query-expansion model and no rerank model ever run at query time. A framework
+that decided which records govern a piece of work would need a judgement-making model of its own, and
+would stop being a framework about a format.
 
-**Semantic search is not its job.** The binary owns the deterministic half — navigating, literal
-search, validation. Semantic search lives in `qmd`, a separate project in its own repository, which
-composes the full search order by calling this binary for the deterministic steps. It is **optional**:
-without it, searches return what the deterministic steps found and say the semantic way was
-unavailable. The binary never fails for its absence.
+**Semantic search is not openrecord's own — it executes another program for it.** The binary owns the
+deterministic half directly: navigating, literal search, validation. For the meaning half, `search`
+executes `qmd`, a separate project in its own repository, as a subprocess and merges what it returns.
+It is **optional**: without it, `search` returns what the deterministic half found and says the semantic
+way was unavailable. The binary never fails for its absence.
 
 ## Commands
 
@@ -29,6 +32,7 @@ unavailable. The binary never fails for its absence.
 | `record` | Write and edit records. |
 | `validate` | Check a coordinate is well-formed, recursively. |
 | `grep` | Literal search, scoped to a store. |
+| `search` | Literal search plus meaning, scoped to a store, merged into one list. |
 | `diagram` | Emit a spec as Mermaid on stdout. |
 | `skills` | Emit the bundled agent skills into a directory you name. |
 | `concerns` | Print the concerns catalogue. |
@@ -391,6 +395,59 @@ here*, a record hit is *open this*.
 
 ---
 
+## `search`
+
+The command that actually finds a record: one deduplicated list, merging `grep`'s literal pass with an
+optional pass by meaning.
+
+```
+openrecord search "rate limit" --for decisions/api
+openrecord search "rate limit" --for decisions/api --omit decisions/api/security/rate-limits/at-the-gateway.md
+```
+
+`--for` is **required** — there is no unscoped search. `--omit` may be repeated, each occurrence naming
+one path exactly as `matches[].path` reports it; a path containing a comma is kept whole, never split.
+
+### One entry per path, never a rank
+
+The literal half behaves exactly like `grep` — one entry per file, the first matching line and a real
+hit count. Where both halves find the same path, the entry kept is the literal one: a real line, real
+text, a real count. No score, no rank, and no field says which half found what — only structural order,
+by path.
+
+### `semantic` says which halves ran
+
+```json
+{
+  "term": "rate limit",
+  "for": "decisions/api",
+  "semantic": "used",
+  "omitted": 0,
+  "matches": []
+}
+```
+
+| Value | Meaning |
+| --- | --- |
+| `used` | Both halves ran. |
+| `lexical-only` | Only the literal half ran — an older `qmd`, or one whose embedding model cannot be reached right now. |
+| `unavailable` | No semantic pass ran at all: `qmd` is absent, the query itself failed, or there is no collection to query. |
+
+Every one of these degrades silently: `search` never emits a warning, never prints `qmd`'s own output,
+and always exits the same way the literal half alone would.
+
+### Two consequences worth stating plainly
+
+A semantic-origin entry — one the meaning half found and the literal half did not — carries `hits: 1`.
+That is a placeholder, not a count: `qmd` reports no per-file total, so it is never comparable with a
+literal entry's real `hits`.
+
+A collection with no embedding index built yet still reports `semantic: used` when the call succeeds:
+the meaning half genuinely ran, it simply had nothing embedded to match against. `search` does not probe
+the index, does not build one, and does not warn — this is a stated property, not a defect.
+
+---
+
 ## `diagram`
 
 ```
@@ -505,8 +562,8 @@ than read. The topics stay out of it — they name nothing and exist to be read.
 
 ## `qmd`
 
-Semantic search is a separate project and openrecord does not own it. These two subcommands are the
-whole relationship.
+Semantic search is a separate project and openrecord does not own it. These two subcommands are how
+openrecord reports on it and installs it; `search` (above) is what actually executes it.
 
 ```
 openrecord qmd status

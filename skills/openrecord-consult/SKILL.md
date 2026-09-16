@@ -76,10 +76,10 @@ step down.
 you found something: finding one record tells you nothing about whether a neighbouring concern holds
 another.
 
-**3. Search when you do not know where to look.**
+**3. Search.**
 
 ```
-openrecord grep "rate limit" --for decisions/api
+openrecord search "rate limit" --for decisions/api
 → decisions/api/security/rate-limits/at-the-gateway.md   [record]  line 12, 6 hits
   decisions/api/security/INDEX.md                        [group]   line 3,  1 hit
 ```
@@ -92,36 +92,18 @@ path straight to `map` is the obvious next move and it is wrong — `map --for d
 the level, `decisions/api/security/rate-limits/at-the-gateway.md` is the file. The tool says so if you
 try it, rather than reporting that a path nobody wrote does not exist.
 
-`grep` is literal, which makes it the cheap and precise half of finding something: it hits exactly when
-you remember the wording, and misses entirely when the record says the same thing in other words.
+`search` always runs a literal pass — it hits exactly when you remember the wording, and misses
+entirely when the record says the same thing in other words.
 
 <!-- qmd:start -->
-`qmd` closes that gap. It finds a record by what it *says* rather than by the words it uses, which is
-what you want when you know the topic but not this project's vocabulary for it.
+When qmd is registered, the same command also runs a pass by meaning over the same scope — no second
+command, no URL to translate. The envelope's `semantic` field says which halves actually ran: `used`
+means both did, `lexical-only` means only the wording match did (an older qmd, or one whose embedding
+model cannot be reached right now), `unavailable` means neither did. Check `openrecord qmd status` if
+you want to know why.
 
-```
-qmd query "how are errors shaped at the boundary" -c <project>-decisions-api
-```
-
-**Query the collection for the component you are working in.** Decisions are one collection per
-component, mirroring the fact that they are closed by component — a result from another surface is not
-a weaker match, it is an answer to a different question. Pass several `-c` flags only when you are
-deliberately looking across surfaces.
-
-**A qmd result is not a coordinate.** It comes back as
-`qmd://<project>-decisions-api/security/rate-limits/at-the-gateway.md:12`. The coordinate is
-`decisions/api/security/rate-limits/at-the-gateway.md` — drop the scheme, read the surface out of the
-collection name, and drop the line number. This is the one place in the walk where a path has to be
-translated, so do it before comparing against anything the other two steps found.
-
-**Check that the search actually ran before you believe it found nothing.** A provider that is
-unreachable or whose credential has expired produces `No results found.` and exit 0 — the same answer
-as a genuine miss, with the failure printed as a line you can scroll past. Run
-`openrecord qmd status` first: it says whether qmd runs at all. If a query returns nothing, say
-*"the semantic step returned nothing"* only when you know it ran; otherwise say it was unavailable.
-
-If `qmd` is not installed or the collections are not registered, say so and continue with what the
-steps above found — it is a missing capability, not a failure.
+If `semantic` is anything other than `used`, say so and continue with what `search` found — it is a
+missing capability, not a failure.
 <!-- qmd:end -->
 
 **No search proves an absence.** Whatever you searched with, coming back empty tells you that you did
@@ -134,12 +116,8 @@ was missed.
 
 ## Surfacing is not governing
 
-The steps above produce **candidates**, deduplicated by path. They speak the store's own paths, so a
-hit from one is comparable with a hit from another without conversion.
-<!-- qmd:start -->
-The one exception is a semantic hit, which arrives as a `qmd://` URL and has to be translated back to a
-coordinate first — see above.
-<!-- qmd:end -->
+The steps above produce **candidates**, deduplicated by path. They speak the store's own paths — a hit
+from one is comparable with a hit from another without conversion, whichever half of `search` found it.
 
 They find different things, which is why none of them travels alone:
 
@@ -147,9 +125,9 @@ They find different things, which is why none of them travels alone:
 | --- | --- | --- |
 | `component owners` | Which surface the file is in, and every capability that names it. | Nothing about *which* of them applies. |
 | The descent | Everything filed under the concerns you entered. The only one that *enumerates*. | What sits in a concern you did not think to enter. |
-| `grep` | Exact wording. | The record that says the same thing in other words. |
+| `search` | Exact wording, plus meaning when semantic search is set up for this project. | The record that says the same thing in other words, when it is not set up. |
 <!-- qmd:start -->
-| `qmd` | Meaning, across the whole component at once. | Nothing systematically — but it ranks, so it can leave something out. |
+| `search`, meaning half | Meaning, across the whole component at once. | Nothing systematically — but it ranks, so it can leave something out. |
 <!-- qmd:end -->
 
 **Then comes the part no command can do: deciding which of them actually governs your work.** A record
@@ -169,7 +147,7 @@ Governs this work:
 
 - specs/rule/usage-limits.md                                  [accepted]
   Constrains you: 60 req/min, 429 with Retry-After.
-  Surfaced by: grep "rate limit"
+  Surfaced by: search "rate limit"
 
 Looked at, does not apply:
 - decisions/api/data — queries and the storage model; nothing there touches request limits.
