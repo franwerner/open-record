@@ -1,7 +1,9 @@
 # Integrating openrecord into an AI ecosystem
 
-openrecord never calls a model. It holds the records and answers questions about them; every judgement
-it depends on is made by whoever is driving — a person, or the agents of an ecosystem built around one.
+openrecord calls no model to decide. It holds the records and answers questions about them; every
+judgement it depends on is made by whoever is driving — a person, or the agents of an ecosystem built
+around one. The one model in the picture is the embedding model behind `search`'s meaning half, which
+is the search itself, not a verdict about what governs a piece of work.
 This document is the contract between the two: what your ecosystem has to do so that a store of records
 actually changes what your agents write, rather than sitting in the repo being technically present.
 

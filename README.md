@@ -3,8 +3,10 @@
 A project's durable records: **what was chosen and why**, and **what the system does**. A directory
 layout, two kinds of document, and a CLI that reads and writes them.
 
-It is not an agent framework and it never calls a model. Everything it does is deterministic;
-everything that needs judgement is prose a person or an agent writes.
+It is not an agent framework and it calls no model to decide — the one model it reaches for is the
+embedding model behind `search`'s meaning half, which is the search itself and not a verdict about
+what governs your work. Everything else is deterministic; everything that needs judgement is prose a
+person or an agent writes.
 
 ## Install
 
@@ -160,8 +162,9 @@ stateDiagram-v2
 ## Semantic search
 
 Optional, and a separate project: [qmd](https://github.com/franwerner/qmd) indexes the store so records
-can be found by meaning rather than exact wording. Without it, searches return what the deterministic
-steps found and say the semantic way was unavailable — openrecord never fails for its absence.
+can be found by meaning rather than exact wording. `search` runs it as a subprocess when it can; with no
+qmd, or no embedding model behind it, it returns what the literal pass found and its `semantic` field
+says which half actually ran. openrecord never fails for its absence.
 
 ```bash
 openrecord qmd status     # installed? which collections does this project need?

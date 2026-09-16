@@ -312,6 +312,7 @@ func TestDocumentedFlagsExist(t *testing.T) {
 func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
 	sites := map[string]string{}
 	for name, path := range map[string]string{
+		"README.md":                          filepath.Join("..", "..", "README.md"),
 		"docs/cli.md":                        filepath.Join("..", "..", "docs", "cli.md"),
 		"INTEGRATION.md":                     filepath.Join("..", "..", "INTEGRATION.md"),
 		"skills/openrecord-consult/SKILL.md": filepath.Join("..", "..", "skills", "openrecord-consult", "SKILL.md"),
@@ -332,6 +333,23 @@ func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
 	for name, text := range sites {
 		if match := superseded.FindString(text); match != "" {
 			t.Errorf("%s states the superseded claim %q — search's meaning half genuinely executes qmd as a subprocess", name, match)
+		}
+	}
+
+	// The same reconciliation, stated the other way round: an unqualified denial
+	// that a model ever runs. One does — the embedding model that IS the meaning
+	// half — so the claim only holds qualified, as "no model to decide" or "no
+	// model at query time". The qualifier is what the reader needs; without it
+	// the sentence is simply false.
+	modelDenial := regexp.MustCompile(`(?i)never (calls?|runs?|invokes?) an? model`)
+	for name, text := range sites {
+		for _, at := range modelDenial.FindAllStringIndex(text, -1) {
+			tail := text[at[1]:min(at[1]+40, len(text))]
+			if strings.Contains(tail, "to decide") || strings.Contains(tail, "at query time") {
+				continue
+			}
+			t.Errorf("%s denies calling a model without the qualifier that makes it true: %q",
+				name, strings.TrimSpace(text[at[0]:at[1]]+tail))
 		}
 	}
 
@@ -366,6 +384,7 @@ func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
 func TestSearchIsThePublishedLookupCommand(t *testing.T) {
 	sites := map[string]string{}
 	for name, path := range map[string]string{
+		"README.md":                          filepath.Join("..", "..", "README.md"),
 		"docs/cli.md":                        filepath.Join("..", "..", "docs", "cli.md"),
 		"INTEGRATION.md":                     filepath.Join("..", "..", "INTEGRATION.md"),
 		"skills/openrecord-consult/SKILL.md": filepath.Join("..", "..", "skills", "openrecord-consult", "SKILL.md"),
