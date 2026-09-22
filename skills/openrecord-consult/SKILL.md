@@ -114,6 +114,23 @@ was missed.
 
 **4. Read the ones that govern you.** Fully. A record is prose written to be understood, not scanned.
 
+**5. Check each one against the code in front of you.** Only the ones you just decided govern this
+work — one or two, never everything that surfaced.
+
+You are holding both sides already. The record is open, and the file you came here to change is the
+reason you opened it. Saying whether they still agree costs one more look at something you are
+reading anyway, and this is the only moment it is free: nobody runs a consistency pass over a store
+on a quiet afternoon, which is why a store drifts in the first place.
+
+**Report it; do not act on it.** A record that no longer matches the code does not block your work
+unless your work depends on that gap. It is a finding somebody needs, and it goes in the block
+below next to everything else you found.
+
+**Keep it to what the file in front of you shows.** This is a glance, not an audit — one claim, the
+line that supports or contradicts it. When the answer is not visible in the code you are already
+reading, say it is not visible and move on. Stretching this step into a claim-by-claim pass over a
+whole record is how a walk stops being run at all, and that pass is a skill of its own anyway.
+
 ## Surfacing is not governing
 
 The steps above produce **candidates**, deduplicated by path. They speak the store's own paths — a hit
@@ -144,16 +161,19 @@ Governs this work:
 - decisions/api/security/rate-limits/at-the-gateway.md        [accepted]
   Constrains you: the limit lives in the gateway; do not add per-handler checks.
   Surfaced by: descent (api/security)
+  Still true of the code: no — src/api/handlers/users.go:88 keeps a counter of
+  its own. Reporting it, not resolving it.
 
 - specs/rule/usage-limits.md                                  [accepted]
   Constrains you: 60 req/min, 429 with Retry-After.
   Surfaced by: search "rate limit"
+  Still true of the code: yes — src/gateway/limiter.go:41.
 
 Looked at, does not apply:
 - decisions/api/data — queries and the storage model; nothing there touches request limits.
 ```
 
-Three things make this worth writing rather than holding in your head:
+Four things make this worth writing rather than holding in your head:
 
 - **"Constrains you"** says what you may not do. It is not a summary of the record — a summary makes a
   reader work out the consequence themselves, and they will not.
@@ -161,6 +181,10 @@ Three things make this worth writing rather than holding in your head:
   descending into the concern that owns your work is stronger evidence than one a search ranked highly.
 - **"Looked at, does not apply"** is the only thing separating *does not apply* from *nobody looked*.
   Leave it out and a reader cannot tell which happened, so they have to redo the walk.
+- **"Still true of the code"** is the one line nobody else is positioned to write. It gets recorded
+  here because you had the record and the file open at the same time, which is a coincidence worth
+  spending: a `no` that goes unsaid here is a store that keeps reading as settled while the code has
+  already moved on.
 
 ## What to do with what you find
 
@@ -176,6 +200,11 @@ is your contract. If you are changing how it is built, the decision is.
 ## When your work contradicts an accepted record
 
 This is the one thing that stops.
+
+**What step 5 turns up is not this.** Code that already contradicts a record was contradicting it
+before you arrived and will keep doing so if you walk away — that is a finding, and it belongs in
+the block above with everything else you found. What stops you is narrower: the change *you are
+about to make* cannot coexist with a record that governs it.
 
 **Stop that line of work** — not everything, only what depends on the conflict — and surface it with
 both sides in view:
