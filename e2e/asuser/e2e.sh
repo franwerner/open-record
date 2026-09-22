@@ -266,7 +266,7 @@ check "$(jstr 'print(d["matches"][0]["hits"]>1)' "$g")" "True" "y cuenta las lí
 step "8. Skills y emit"
 openrecord skills --emit .claude/skills/ --with-qmd >/dev/null
 check "$(ls .claude/skills | sort | tr '\n' ' ')" \
-      "openrecord-bootstrap openrecord-capture openrecord-consult openrecord-mine openrecord-setup-search " "las cinco skills, todas con prefijo"
+      "openrecord-audit openrecord-bootstrap openrecord-capture openrecord-consult openrecord-mine openrecord-reconcile openrecord-setup-search " "las siete skills, todas con prefijo"
 fp() { find .claude/skills -type f -exec sha256sum {} + | sort | sha256sum; }
 b="$(fp)"; openrecord skills --emit .claude/skills/ --with-qmd --dry-run >/dev/null
 check "$(fp)" "$b" "--dry-run no tocó nada"

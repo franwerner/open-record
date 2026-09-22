@@ -20,6 +20,8 @@ ecosystem that covers only some of them gets a store that decays.
 | --- | --- | --- |
 | Before writing code | Find what already governs this work, and obey it | `openrecord-consult` |
 | After the work ships | Record what was decided, while the reasoning is still in someone's head | `openrecord-capture` |
+| A record is trusted, or doubted | Check a record against the code it governs, claim by claim | `openrecord-audit` |
+| A record was just written or edited | Check it against the rest of the store, not just the code | `openrecord-reconcile` |
 | Starting a project | Populate an empty store by asking, not by inferring | `openrecord-bootstrap` |
 | Inheriting a codebase | Reconstruct candidate records from what is already built | `openrecord-mine` |
 | Once per project | Make the store findable by meaning | `openrecord-setup-search` |
@@ -102,10 +104,13 @@ conclude alone.
 
 ### Where this contract lives today
 
-Of the skills openrecord emits, `openrecord-consult` and `openrecord-capture` carry the contradiction
-section in full. `openrecord-bootstrap` and `openrecord-mine` do not — mine's nearest equivalent is a
-duplicate check, which is a different concern. `openrecord-setup-search` touches no record content and
-has no reason to carry it.
+Of the skills openrecord emits, `openrecord-consult`, `openrecord-capture`, `openrecord-audit`, and
+`openrecord-reconcile` carry the contradiction section in full — audit's version stops on a record
+contradicted by the code rather than on work that contradicts a record, reconcile's stops on two
+records that contradict each other rather than on either side alone, but the discipline is the same:
+present both sides and never resolve it alone. `openrecord-bootstrap` and `openrecord-mine` do not —
+mine's nearest equivalent is a duplicate check, which is a different concern. `openrecord-setup-search`
+touches no record content and has no reason to carry it.
 
 State this plainly rather than assume: an integrating ecosystem that relies on the emitted skills alone
 inherits the contract unevenly, and the gap is on the two skills that *write* records. If your flow has

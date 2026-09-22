@@ -42,13 +42,15 @@ part of the format or the tooling: strip them and layers 1 and 2 still work. ope
 position on who may write a record or when — there is no role vocabulary, and the commands are
 mechanical actions a consumer calls.
 
-Four skills, each with its own trigger — the CLI already does the mechanics, so what these carry is
+Seven skills, each with its own trigger — the CLI already does the mechanics, so what these carry is
 judgement:
 
 | Skill | Fires when |
 | --- | --- |
 | `openrecord-consult` | Before writing or changing code. Find what governs it first. |
 | `openrecord-capture` | Work finished. Decide what the store should say — usually nothing. |
+| `openrecord-audit` | A record is suspected stale, or you're about to lean on one heavily. Check it against the code, claim by claim. |
+| `openrecord-reconcile` | A record was just written or edited. Check it against the other records it could contradict. |
 | `openrecord-bootstrap` | An empty store. Fill it by asking the user, never by inferring. |
 | `openrecord-mine` | Code but no records. Reconstruct candidates; never write. |
 | `openrecord-setup-search` | Once per project, and only with `--with-qmd`. Registers the stores so records can be found by meaning. |
