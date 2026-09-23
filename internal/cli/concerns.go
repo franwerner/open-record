@@ -4,9 +4,9 @@ import (
 	"flag"
 	"fmt"
 
-	openrecord "github.com/franwerner/openrecord"
-	"github.com/franwerner/openrecord/internal/catalogue"
-	"github.com/franwerner/openrecord/internal/finding"
+	openrecord "github.com/franwerner/open-record"
+	"github.com/franwerner/open-record/internal/catalogue"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 type concernSummary struct {

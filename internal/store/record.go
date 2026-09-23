@@ -8,8 +8,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/frontmatter"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/frontmatter"
 )
 
 // Status is what a record settles. Two values, and only two: there is no

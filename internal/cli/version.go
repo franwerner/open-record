@@ -1,6 +1,6 @@
 package cli
 
-import "github.com/franwerner/openrecord/internal/finding"
+import "github.com/franwerner/open-record/internal/finding"
 
 // Build identity, stamped by the release pipeline via ldflags. The defaults are
 // what a `go build` without them produces, and they have to be legible in a bug

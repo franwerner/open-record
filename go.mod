@@ -1,3 +1,3 @@
-module github.com/franwerner/openrecord
+module github.com/franwerner/open-record
 
 go 1.22

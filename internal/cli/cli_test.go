@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/franwerner/openrecord/internal/finding"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 func run(t *testing.T, args ...string) (int, string, string) {

@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 // EntryKind tells a caller what to do with an entry. It is load-bearing: at a

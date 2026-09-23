@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 // Command is one entry in the command tree. A command either runs or holds

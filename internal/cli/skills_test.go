@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	openrecord "github.com/franwerner/openrecord"
+	openrecord "github.com/franwerner/open-record"
 )
 
 func emitted(t *testing.T, dir string) map[string]string {

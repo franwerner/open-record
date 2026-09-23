@@ -7,10 +7,10 @@ import (
 	"regexp"
 	"strings"
 
-	openrecord "github.com/franwerner/openrecord"
-	"github.com/franwerner/openrecord/internal/emit"
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/qmd"
+	openrecord "github.com/franwerner/open-record"
+	"github.com/franwerner/open-record/internal/emit"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/qmd"
 )
 
 // qmdBlock marks a passage that only applies when semantic search is installed.

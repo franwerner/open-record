@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	openrecord "github.com/franwerner/openrecord"
+	openrecord "github.com/franwerner/open-record"
 )
 
 // repoPaths are directories that exist in THIS repository and not in a project

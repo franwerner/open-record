@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // declared is a repository with one component and one concern, ready to be

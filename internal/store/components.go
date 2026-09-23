@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 // Component is one declared surface of the repository.

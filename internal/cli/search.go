@@ -7,9 +7,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/qmd"
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/qmd"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // searchReport is the one thing `search` writes: two passes merged into a
