@@ -147,30 +147,37 @@ qmd's documentation to answer, not this skill's. The process environment still w
 wins over `.env` when both set the same key (useful for CI, where there is no file to commit at all) —
 but there is no longer a reason to keep secrets out of this one file.
 
-**4. Confirm it before spending a registration on it.** Raw `qmd doctor` and `qmd status` read the
-*global* qmd state unless told otherwise — this project's state lives under
-`.openrecord/.qmd/`, which only openrecord's own commands address automatically. Point a raw qmd call
-at it the same way openrecord does internally:
+**4. Set the ranking model's key in the same file.** `openrecord search` also needs
+`OPENROUTER_API_KEY` for Jev, the model that ranks records against `--context`. Without it, qmd can be
+fully set up and every search still fails. It is not a qmd setting, but it belongs in the same file
+for the same reasons:
 
 ```
-QMD_CONFIG_DIR="$(pwd)/.openrecord/.qmd" INDEX_PATH="$(pwd)/.openrecord/.qmd/index.sqlite" qmd doctor
+# .openrecord/.env
+OPENROUTER_API_KEY=...
 ```
 
-Two lines say whether the configuration took:
+**5. Confirm it through openrecord, not through raw qmd.** Only openrecord's own commands read
+`.openrecord/.env`; a raw `qmd doctor`, `qmd status` or `qmd pull` never does, so on a fresh project it
+reports qmd's defaults even when the file is right. Do not judge the configuration from a raw qmd call.
 
-- **`model cache: missing`** — read it against what was chosen. Naming **local** models: they have to
-  be downloaded, so run `qmd pull` before going on. Naming **hosted** models: expected and not a
-  problem, since those are not files and there is nothing to cache. Naming models **nobody chose** —
-  qmd's own defaults, when a hosted provider was the choice — means `.openrecord/.env` is not being
-  read, and that is what to fix.
-- **`QMD_EMBED_MODEL is set to X but index config uses Y`** — the project's own index config, written at
-  the first `openrecord qmd index`, is winning over a later `.env` edit, as it should once a collection
-  exists. Change the model with `openrecord qmd index --rebuild` instead of editing the file directly.
+```
+openrecord qmd status
+openrecord jev status
+```
 
-The third line, **`search provider`**, cannot answer yet on a fresh project — there is no chunk to
-re-embed, so `doctor` reports `not exercised by these checks, so nothing is claimed about it`, which is
-the honest answer here, not a failure. **Do not stop on it.** The provider is confirmed one step later,
-by the embed `openrecord qmd index` runs itself.
+- In `qmd status`, `sources` should name `dotenv` for each key just written. `unset` for one of them
+  means `.openrecord/.env` does not hold it as you think — fix the file before going on.
+- `jev status` should report `api_key: true`, `reachable: true` and `sources.key: "dotenv"`. It exits
+  non-zero when either is false.
+
+There is no separate download step. Local models are fetched by the embed that `openrecord qmd index`
+runs, with this project's `.env` applied, so the model it fetches is the one the user chose. The
+provider itself is confirmed by that same embed: a provider that does not answer makes the command fail.
+
+Once a collection exists, the model it was built with is recorded in this project's index config and
+wins over a later `.env` edit. Change the model with `openrecord qmd index --rebuild`, never by editing
+that config.
 
 ## Register
 
@@ -194,15 +201,17 @@ is a hard failure, not a quiet one.
 
 ## The whole thing, in order
 
-The **order** is the part that generalises. What goes into `.openrecord/.env` in steps 2 and 3 is
-whatever the user chose, and the credential line is only there for a hosted provider.
+The **order** is the part that generalises. What goes into `.openrecord/.env` in steps 2 to 4 is
+whatever the user chose; the qmd credential lines are only there for a hosted provider, and
+`OPENROUTER_API_KEY` is always there.
 
 ```
-ask                                                # local models, or a hosted API? which?
-openrecord qmd status                              # usable? which collections? current sources?
-$EDITOR .openrecord/.env                           # models + credentials — theirs, this project's own
-QMD_CONFIG_DIR="$(pwd)/.openrecord/.qmd" qmd pull   # local models only — this project's own cache
-openrecord qmd index                               # registers, updates, embeds — exits non-zero on failure
+ask                      # local models, or a hosted API? which?
+openrecord qmd status    # usable? which collections? current sources?
+$EDITOR .openrecord/.env # models, qmd credentials, OPENROUTER_API_KEY — this project's own
+openrecord qmd status    # sources: dotenv for every key just written
+openrecord jev status    # api_key and reachable both true — exits non-zero otherwise
+openrecord qmd index     # registers, fetches models, embeds — exits non-zero on failure
 ```
 
 ## Re-run it when the components change
