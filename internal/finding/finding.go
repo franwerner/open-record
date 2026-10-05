@@ -47,6 +47,7 @@ const (
 	CodeBodyHashMismatch     = "body-hash-mismatch"
 	CodeJevUnavailable       = "jev-unavailable"
 	CodeQmdUnavailable       = "qmd-unavailable"
+	CodeQmdNotIndexed        = "qmd-not-indexed"
 	CodeSearchNotFound       = "search-not-found"
 	CodeRecordNotInSearch    = "record-not-in-search"
 	CodeRecordNotOpened      = "record-not-opened"
