@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // Verdicts. contradicts implies governs — a record that contradicts the

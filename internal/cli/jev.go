@@ -4,8 +4,8 @@ import (
 	"context"
 	"os"
 
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/jev"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/jev"
 )
 
 // runJevStatus reports whether a search could reach Jev: the key is present

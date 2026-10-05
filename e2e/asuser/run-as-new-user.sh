@@ -40,8 +40,8 @@ if [ "${BUILD_LOCAL:-no}" = "yes" ]; then
   asgo() { ( cd "$REPO" && sudo -u "$owner" env HOME=/home/ifran PATH="$PATH" go "$@" ); }
 
   echo "==> compilando openrecord desde $REPO ($commit)"
-  asgo build -ldflags "-X github.com/franwerner/openrecord/internal/cli.version=$tag \
-                       -X github.com/franwerner/openrecord/internal/cli.commit=$commit" \
+  asgo build -ldflags "-X github.com/franwerner/open-record/internal/cli.version=$tag \
+                       -X github.com/franwerner/open-record/internal/cli.commit=$commit" \
       -o /tmp/openrecord-local ./cmd/openrecord
 
   # El nombre tiene que ser exactamente el que install.sh compone, o la descarga

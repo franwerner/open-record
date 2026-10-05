@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/franwerner/openrecord/internal/review"
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/review"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // seedSearch writes a stored search directly, the way review_test.go seeds a

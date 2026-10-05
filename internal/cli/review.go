@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/review"
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/review"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // readStoreFile reads a record by its store-relative path, for review.Open's

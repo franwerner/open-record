@@ -26,7 +26,7 @@ ranking model it calls at query time.
 With a Go toolchain:
 
 ```bash
-go install github.com/franwerner/openrecord/cmd/openrecord@latest
+go install github.com/franwerner/open-record/cmd/openrecord@latest
 ```
 
 Or download an archive for your platform from

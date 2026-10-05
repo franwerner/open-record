@@ -17,9 +17,9 @@ builds:
     goarch: [amd64, arm64]
     ldflags:
       - -s -w
-      - -X github.com/franwerner/openrecord/internal/cli.version={{.Version}}
-      - -X github.com/franwerner/openrecord/internal/cli.commit={{.FullCommit}}
-      - -X github.com/franwerner/openrecord/internal/cli.date={{.Date}}
+      - -X github.com/franwerner/open-record/internal/cli.version={{.Version}}
+      - -X github.com/franwerner/open-record/internal/cli.commit={{.FullCommit}}
+      - -X github.com/franwerner/open-record/internal/cli.date={{.Date}}
 
 archives:
   - id: openrecord

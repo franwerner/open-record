@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // noSemanticHits is a qmd stub that answers every subcommand search needs —

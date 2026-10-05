@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 func at(seconds int) time.Time {

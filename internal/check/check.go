@@ -7,8 +7,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // FlatConcern is how many loose records in one concern earn a suggestion to

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	openrecord "github.com/franwerner/openrecord"
-	"github.com/franwerner/openrecord/internal/finding"
+	openrecord "github.com/franwerner/open-record"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 func emitted(t *testing.T, dir string) map[string]string {

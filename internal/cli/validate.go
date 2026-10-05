@@ -1,9 +1,9 @@
 package cli
 
 import (
-	"github.com/franwerner/openrecord/internal/check"
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/check"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 type validateReport struct {

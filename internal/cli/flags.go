@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 // flagSet builds a parser that stays quiet: usage goes through the command tree,

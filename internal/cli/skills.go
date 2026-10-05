@@ -5,9 +5,9 @@ import (
 	"io/fs"
 	"path"
 
-	openrecord "github.com/franwerner/openrecord"
-	"github.com/franwerner/openrecord/internal/emit"
-	"github.com/franwerner/openrecord/internal/finding"
+	openrecord "github.com/franwerner/open-record"
+	"github.com/franwerner/open-record/internal/emit"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 type skillsReport struct {

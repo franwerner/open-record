@@ -11,7 +11,7 @@ import (
 	"strings"
 	"unicode"
 
-	openrecord "github.com/franwerner/openrecord"
+	openrecord "github.com/franwerner/open-record"
 )
 
 // Concern is one entry: the folder vocabulary, plus the description a new level

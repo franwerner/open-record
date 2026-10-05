@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/franwerner/openrecord/internal/finding"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 // Errorf is the local spelling of finding.Errorf, so command code reads without

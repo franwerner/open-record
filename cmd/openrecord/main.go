@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/franwerner/openrecord/internal/cli"
+	"github.com/franwerner/open-record/internal/cli"
 )
 
 func main() {

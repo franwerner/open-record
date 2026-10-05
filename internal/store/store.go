@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/franwerner/openrecord/internal/finding"
+	"github.com/franwerner/open-record/internal/finding"
 )
 
 // Root is the directory the store lives in, at the repository root.

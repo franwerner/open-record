@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 func writeSpec(t *testing.T, repo, specType, slug, body string) string {

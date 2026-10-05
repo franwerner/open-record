@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/franwerner/openrecord/internal/finding"
-	"github.com/franwerner/openrecord/internal/store"
+	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 // runIn drives the CLI against a repository, the way a caller does.
