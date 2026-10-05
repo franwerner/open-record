@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/franwerner/open-record/internal/qmd"
 )
 
 // Every scenario here scopes into the `api` component of e2e/project, whose
@@ -32,7 +34,7 @@ const (
 // git and to the other commands' own scope.
 func TestSearchServesAndStoresEndToEnd(t *testing.T) {
 	repo := project(t)
-	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings), stubJev(t, map[string]float64{
+	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings(repo, "api")), stubJev(t, map[string]float64{
 		gatewayTitle: 0.9,
 		quotasTitle:  0.1,
 	}, 0.05))
@@ -136,7 +138,7 @@ func TestSearchIsInvisibleToOtherCommands(t *testing.T) {
 	_, grepBefore, _ := run(t, repo, "grep", "rate limit", "--for", "decisions/api")
 	_, validateBefore, _ := run(t, repo, "validate", "--for", "decisions/api")
 
-	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings), stubJev(t, nil, 0.5))
+	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings(repo, "api")), stubJev(t, nil, 0.5))
 	code, _, stderr := runWith(t, repo, env, "search", "--for", "decisions/api",
 		"--literal", searchTerm, "--semantic", "rate limiting", "--context", "a test")
 	if code != exitOK {
@@ -168,7 +170,7 @@ func TestSearchFailsWhenKeyIsMissing(t *testing.T) {
 	}))
 	defer server.Close()
 
-	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings),
+	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings(repo, "api")),
 		[]string{"OPENROUTER_API_KEY=", "OPENRECORD_JEV_ENDPOINT=" + server.URL})
 
 	code, stdout, stderr := runWith(t, repo, env, "search", "--for", "decisions/api",
@@ -198,7 +200,7 @@ func TestSearchFailsWhenJevErrors(t *testing.T) {
 	}))
 	defer server.Close()
 
-	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings),
+	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings(repo, "api")),
 		[]string{"OPENROUTER_API_KEY=a-key", "OPENRECORD_JEV_ENDPOINT=" + server.URL})
 
 	code, stdout, stderr := runWith(t, repo, env, "search", "--for", "decisions/api",
@@ -229,6 +231,9 @@ func TestSearchQueryCarriesNoRerankAndJevSeesOnlyTitlesAndDescriptions(t *testin
 	argvFile := filepath.Join(t.TempDir(), "argv")
 
 	qmdEnv := stubQmd(t, `
+case "$1 $2" in
+  "collection list") echo '{"schemaVersion":1,"collections":[{"name":"`+qmd.DecisionsCollection(filepath.Base(repo), "api")+`"}]}'; exit 0 ;;
+esac
 case "$1" in
   --version|-v) echo "qmd 2.8.3-mate.7"; exit 0 ;;
   status) echo "QMD Status"; exit 0 ;;
@@ -290,7 +295,7 @@ esac
 // search this test itself creates, and jev status against the same double.
 func TestSearchReviewFlowEndToEnd(t *testing.T) {
 	repo := project(t)
-	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings), stubJev(t, map[string]float64{
+	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings(repo, "api")), stubJev(t, map[string]float64{
 		gatewayTitle: 0.9,
 	}, 0.5))
 
@@ -313,6 +318,88 @@ func TestSearchReviewFlowEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(statusOut, "completed_at") {
 		t.Errorf("status does not report completed_at: %s", statusOut)
+	}
+}
+
+// TestSearchFailsWhenProjectIsNotIndexed is scenario (e): qmd is on the PATH
+// and usable, but no collection is registered for this search's scope — D8
+// fails the search before a Jev request is ever built.
+func TestSearchFailsWhenProjectIsNotIndexed(t *testing.T) {
+	repo := project(t)
+	var called bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer server.Close()
+
+	// No components passed: only the specs collection is reported registered,
+	// never project-decisions-api, which is all this --for scope needs.
+	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings(repo)),
+		[]string{"OPENROUTER_API_KEY=a-key", "OPENRECORD_JEV_ENDPOINT=" + server.URL})
+
+	code, stdout, stderr := runWith(t, repo, env, "search", "--for", "decisions/api",
+		"--literal", searchTerm, "--semantic", "rate limiting", "--context", "a test")
+	if code == exitOK {
+		t.Fatal("search ran against a project with no qmd index for its scope")
+	}
+	if stdout != "" {
+		t.Errorf("a failing search wrote to stdout: %s", stdout)
+	}
+	if called {
+		t.Error("a request reached the Jev endpoint despite there being no index")
+	}
+	result := decode[finding](t, stderr)
+	if result.Code != "qmd-not-indexed" || !strings.Contains(result.Message, "qmd index") {
+		t.Errorf("stderr = %+v, want qmd-not-indexed naming `openrecord qmd index`", result)
+	}
+}
+
+// TestSearchReadsTheKeyFromDotenvWhenProcessEnvLacksIt is RS-1's "Key from
+// .env" scenario, end to end: the key lives only in `.openrecord/.env`, the
+// process environment genuinely never carries it (stubQmd's own environment
+// is PATH and HOME only — no inherited key to fall back on), and the Jev
+// double must still receive it in the Authorization header.
+func TestSearchReadsTheKeyFromDotenvWhenProcessEnvLacksIt(t *testing.T) {
+	repo := project(t)
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		var body struct {
+			Questions map[string]any `json:"questions"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		answers := make(map[string]map[string]float64, len(body.Questions))
+		for name := range body.Questions {
+			answers[name] = map[string]float64{"noul": 0.5}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"answers": answers})
+	}))
+	defer server.Close()
+
+	if err := os.WriteFile(filepath.Join(repo, ".openrecord", ".env"),
+		[]byte("OPENROUTER_API_KEY=dotenv-only-key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Deliberately no OPENROUTER_API_KEY entry here: stubQmd's own
+	// environment carries only PATH and HOME, so the subprocess the binary
+	// runs in has no key at all except through the .env file just written.
+	env := mergeEnv(stubQmd(t, workingQmdWithEmbeddings(repo, "api")),
+		[]string{"OPENRECORD_JEV_ENDPOINT=" + server.URL})
+
+	code, stdout, stderr := runWith(t, repo, env, "search", "--for", "decisions/api",
+		"--literal", searchTerm, "--semantic", "rate limiting", "--context", "a test")
+	if code != exitOK {
+		t.Fatalf("search failed: %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	report := decode[searchOutput](t, stdout)
+	if len(report.Records) == 0 {
+		t.Fatal("nothing was served")
+	}
+	if gotAuth != "Bearer dotenv-only-key" {
+		t.Errorf("authorization = %q, want the key declared only in .openrecord/.env", gotAuth)
 	}
 }
 

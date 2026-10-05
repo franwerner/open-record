@@ -9,18 +9,28 @@
 // as qmd keeps it: which collections are registered lives in its configuration,
 // in its format, and reading that would break the day it changes.
 //
-// The one thing this package DOES read from qmd is `qmd capabilities --json` —
-// a published, versioned surface qmd exposes for exactly one question, whether
-// the embedding model can be reached. That is qmd's own answer about itself,
-// not its configuration, so reading it does not cross the line above.
+// The two things this package DOES read from qmd are published, versioned
+// surfaces qmd exposes for exactly one question each: `qmd capabilities
+// --json`, whether the embedding model can be reached, and `qmd collection
+// list --format json` (schemaVersion 1, the same contract shape), which
+// collections are already registered. Both are qmd's own answer about
+// itself, not its configuration, so reading them does not cross the line
+// above.
+//
+// Every call in this package except Install takes a Runtime: the directory
+// one project's own qmd state lives in, and the full environment — merged
+// and pinned by the caller, see internal/projectenv — every subprocess runs
+// under. Nothing here reads a dotenv file or merges an environment itself.
 package qmd
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -41,6 +51,88 @@ const PinnedVersion = "2.8.3-mate.7"
 // URL does not.
 const InstallSource = "https://github.com/franwerner/qmd/releases/download/v" +
 	PinnedVersion + "/tobilu-qmd-" + PinnedVersion + ".tgz"
+
+// DirName is the directory, under a project's own `.openrecord/`, that holds
+// that project's qmd state — its index and its configuration, never the
+// global one a bare `qmd` would use.
+const DirName = ".qmd"
+
+// Runtime is where one project's qmd calls run: the directory this project's
+// own index and configuration live in, and the full environment every
+// subprocess receives. Environ is expected to already carry Pinned(Dir) —
+// command refuses to run otherwise, so a zero or incompletely-built Runtime
+// can never fall back to silently addressing the global index.
+type Runtime struct {
+	// Dir is normally <repo>/.openrecord/.qmd, built and made absolute by the
+	// caller — see the cli package's qmdRuntime.
+	Dir string
+	// Environ is the exact environment every subprocess receives: the
+	// caller's merged environment plus Pinned(Dir). Never defaulted or
+	// extended by this package.
+	Environ []string
+}
+
+// Pinned returns exactly the two keys that must never come from a project's
+// own environment: the directory qmd keeps its configuration in, and the
+// index file within it. Dir is expected to already be absolute.
+func Pinned(dir string) map[string]string {
+	return map[string]string{
+		"QMD_CONFIG_DIR": dir,
+		"INDEX_PATH":     filepath.Join(dir, "index.sqlite"),
+	}
+}
+
+// Prepare makes rt.Dir ready to receive qmd's state: the directory exists,
+// and it ignores itself completely in git, so a brand-new project never
+// leaves this cache half-committed by accident. (The store-wide `/.env`
+// ignore line is a different file, written by projectenv.EnsureIgnored.)
+func (rt Runtime) Prepare() error {
+	if err := os.MkdirAll(rt.Dir, 0o755); err != nil {
+		return err
+	}
+	ignore := filepath.Join(rt.Dir, ".gitignore")
+	if _, err := os.Stat(ignore); err == nil {
+		return nil
+	}
+	return os.WriteFile(ignore, []byte("*\n"), 0o644)
+}
+
+// Reset destroys rt.Dir entirely — the one destructive path in this package,
+// used only by `qmd index --rebuild`. It removes exactly rt.Dir and nothing
+// above it; the caller re-creates it with Prepare afterwards.
+func (rt Runtime) Reset() error {
+	return os.RemoveAll(rt.Dir)
+}
+
+// validate reports whether rt.Environ actually pins INDEX_PATH under rt.Dir.
+// Checked before every exec in this package except Install: a Runtime that
+// fails this can never run a command that would otherwise silently fall back
+// to whatever index a bare `qmd` happens to find on its own.
+func (rt Runtime) validate() error {
+	want := "INDEX_PATH=" + filepath.Join(rt.Dir, "index.sqlite")
+	for _, entry := range rt.Environ {
+		if entry == want {
+			return nil
+		}
+	}
+	return fmt.Errorf("qmd: refusing to run without INDEX_PATH pinned under %s", rt.Dir)
+}
+
+// command builds one qmd subprocess bound to rt: the exact environment rt
+// carries, and nothing else. It does its own exec.LookPath, same as every
+// entry point in this package — there is no shared cached path.
+func command(ctx context.Context, rt Runtime, args ...string) (*exec.Cmd, error) {
+	if err := rt.validate(); err != nil {
+		return nil, err
+	}
+	path, err := exec.LookPath(Binary)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, path, args...)
+	cmd.Env = rt.Environ
+	return cmd, nil
+}
 
 // Status is what can be known about qmd from outside it.
 type Status struct {
@@ -64,12 +156,12 @@ func (s Status) IsPinned() bool {
 
 // Check looks for qmd on the PATH and asks it for its version. It does not ask
 // whether qmd works — see Probe.
-func Check() Status {
+func Check(rt Runtime) Status {
 	path, err := exec.LookPath(Binary)
 	if err != nil {
 		return Status{}
 	}
-	return Status{Installed: true, Path: path, Version: version(path)}
+	return Status{Installed: true, Path: path, Version: version(rt)}
 }
 
 // Probe is Check plus the question that matters before telling somebody to go
@@ -78,16 +170,22 @@ func Check() Status {
 // `--version` is the one command that does not open the index, so answering it
 // proves nothing about the install. This runs `status`, which does, and which
 // is read-only.
-func Probe() Status {
-	status := Check()
+func Probe(rt Runtime) Status {
+	status := Check(rt)
 	if !status.Installed {
 		return status
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	command := exec.CommandContext(ctx, status.Path, "status")
-	output, err := command.CombinedOutput()
+	cmd, err := command(ctx, rt, "status")
+	if err != nil {
+		unusable := false
+		status.Usable = &unusable
+		status.Trouble = err.Error()
+		return status
+	}
+	output, err := cmd.CombinedOutput()
 	usable := err == nil
 	status.Usable = &usable
 	if !usable {
@@ -100,12 +198,17 @@ func Probe() Status {
 }
 
 // version asks the binary what it is. A tool that does not answer is still
-// installed — the version is a nicety, its absence is not a failure.
-func version(path string) string {
+// installed — the version is a nicety, its absence (including an invalid
+// Runtime, which degrades the same way) is not a failure.
+func version(rt Runtime) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	output, err := exec.CommandContext(ctx, path, "--version").Output()
+	cmd, err := command(ctx, rt, "--version")
+	if err != nil {
+		return ""
+	}
+	output, err := cmd.Output()
 	if err != nil {
 		return ""
 	}
@@ -133,6 +236,11 @@ func firstLine(output string) string {
 
 // Install runs the package manager, streaming its output so a slow build does
 // not look like a hang.
+//
+// Unlike every other entry point here, Install takes no Runtime and sets no
+// Env at all: npm's own install must see the plain process environment, never
+// a project's pinned paths or its `.env` keys (QMD-2) — there is nothing
+// project-specific about installing the tool itself.
 func Install(stdout, stderr *os.File) error {
 	command := exec.Command("npm", "install", "-g", InstallSource)
 	command.Stdout = stdout
@@ -209,10 +317,10 @@ type Capabilities struct {
 	Generate      Capability `json:"generate"`
 }
 
-// supportedSchemaVersion is the one capabilities shape this package knows how
-// to read. A qmd naming a different version is treated the same as one that
-// cannot answer at all: degrading is always safe, guessing at a shape this
-// package has never seen is not.
+// supportedSchemaVersion is the one capabilities (and collection list) shape
+// this package knows how to read. A qmd naming a different version is
+// treated the same as one that cannot answer at all: degrading is always
+// safe, guessing at a shape this package has never seen is not.
 const supportedSchemaVersion = 1
 
 // ReadCapabilities asks qmd which halves of a query it can actually run.
@@ -226,15 +334,15 @@ const supportedSchemaVersion = 1
 //
 // This is a question that only needs asking about the binary itself, not one
 // that opens the index — the same 5s budget version() already uses.
-func ReadCapabilities() (Capabilities, error) {
-	path, err := exec.LookPath(Binary)
-	if err != nil {
-		return Capabilities{}, err
-	}
+func ReadCapabilities(rt Runtime) (Capabilities, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	output, err := exec.CommandContext(ctx, path, "capabilities", "--json").Output()
+	cmd, err := command(ctx, rt, "capabilities", "--json")
+	if err != nil {
+		return Capabilities{}, err
+	}
+	output, err := cmd.Output()
 	if err != nil {
 		return Capabilities{}, err
 	}
@@ -248,22 +356,100 @@ func ReadCapabilities() (Capabilities, error) {
 	return report, nil
 }
 
+// ListCollections asks qmd which collections are already registered, by
+// reading its published `collection list --format json` contract — qmd's own
+// answer about itself, versioned the same way capabilities is, so a shape
+// this package has never seen is reported as an error rather than guessed at.
+func ListCollections(rt Runtime) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	cmd, err := command(ctx, rt, "collection", "list", "--format", "json")
+	if err != nil {
+		return nil, err
+	}
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var report struct {
+		SchemaVersion int `json:"schemaVersion"`
+		Collections   []struct {
+			Name string `json:"name"`
+		} `json:"collections"`
+	}
+	if err := json.Unmarshal(output, &report); err != nil {
+		return nil, err
+	}
+	if report.SchemaVersion != supportedSchemaVersion {
+		return nil, fmt.Errorf("qmd collection list: unrecognised schemaVersion %d", report.SchemaVersion)
+	}
+	names := make([]string, 0, len(report.Collections))
+	for _, collection := range report.Collections {
+		names = append(names, collection.Name)
+	}
+	return names, nil
+}
+
+// AddCollection registers one collection: dir, already Markdown underneath
+// it, registered under name. Output streams to out as it runs, so a pass
+// over many files does not look like a hang.
+func AddCollection(rt Runtime, name, dir string, out io.Writer) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	cmd, err := command(ctx, rt, "collection", "add", dir, "--name", name, "--mask", "**/*.md")
+	if err != nil {
+		return err
+	}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	return cmd.Run()
+}
+
+// Update picks up new and changed files in every already-registered
+// collection — what makes an idempotent `qmd index` re-run also re-embed
+// what changed in a collection it kept rather than re-added.
+func Update(rt Runtime, out io.Writer) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	cmd, err := command(ctx, rt, "update")
+	if err != nil {
+		return err
+	}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	return cmd.Run()
+}
+
+// Embed runs the embedding pass for whatever is pending. It carries no
+// deadline: unlike every other call in this package, a real embedding pass —
+// local or hosted — has no bound this package can safely guess, so the
+// caller's own process lifetime is the only limit. Output streams to out
+// (conventionally stderr) as it runs.
+func Embed(rt Runtime, out io.Writer) error {
+	cmd, err := command(context.Background(), rt, "embed")
+	if err != nil {
+		return err
+	}
+	cmd.Stdout = out
+	cmd.Stderr = out
+	return cmd.Run()
+}
+
 // Query runs one qmd query subprocess for the semantic half and decodes its
 // bare array of hits.
 //
 // qmd is required now — see the package doc — so this sends only the vec
 // document; there is no keyword half and no degrade path left to choose
-// between. Query is still its own probe: it does its own exec.LookPath, runs
-// under its own time bound, and returns an error rather than a partial result
-// for an absent binary, a non-zero exit, a timeout, or output that does not
-// parse as the bare array the typed query promises.
-func Query(vec string, collections []string) ([]Hit, error) {
+// between. Query is still its own probe: it runs under its own time bound,
+// via command, and returns an error rather than a partial result for an
+// invalid Runtime, an absent binary, a non-zero exit, a timeout, or output
+// that does not parse as the bare array the typed query promises.
+func Query(vec string, collections []string, rt Runtime) ([]Hit, error) {
 	if len(collections) == 0 {
 		return nil, fmt.Errorf("qmd query: no collection to query")
-	}
-	path, err := exec.LookPath(Binary)
-	if err != nil {
-		return nil, err
 	}
 
 	document := "vec: " + collapseLines(vec)
@@ -279,7 +465,11 @@ func Query(vec string, collections []string) ([]Hit, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	output, err := exec.CommandContext(ctx, path, args...).Output()
+	cmd, err := command(ctx, rt, args...)
+	if err != nil {
+		return nil, err
+	}
+	output, err := cmd.Output()
 	if err != nil {
 		return nil, err
 	}

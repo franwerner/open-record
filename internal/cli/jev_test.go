@@ -4,7 +4,12 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/franwerner/open-record/internal/store"
 )
 
 type jevStatusReport struct {
@@ -13,6 +18,27 @@ type jevStatusReport struct {
 	Model     string `json:"model"`
 	Endpoint  string `json:"endpoint"`
 	Trouble   string `json:"trouble,omitempty"`
+	Sources   struct {
+		Key      string `json:"key"`
+		Endpoint string `json:"endpoint"`
+	} `json:"sources"`
+}
+
+// unsetenv guarantees key is truly absent from the process environment for
+// the duration of the test — unlike t.Setenv("", ""), which still leaves the
+// key present with an empty value, and so still wins Merge's precedence over
+// a dotenv-only value.
+func unsetenv(t *testing.T, key string) {
+	t.Helper()
+	original, had := os.LookupEnv(key)
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if had {
+			os.Setenv(key, original)
+		}
+	})
 }
 
 func TestJevStatusWithNoKeySendsNoRequest(t *testing.T) {
@@ -94,5 +120,33 @@ func TestJevStatusUnreachable(t *testing.T) {
 	}
 	if report.Trouble == "" {
 		t.Error("trouble is empty for an unreachable endpoint")
+	}
+}
+
+// JS-1: the key's own value must never reach the report, only where it came
+// from. Declared solely in `.openrecord/.env`, with the process environment
+// genuinely unset (not merely empty), its source must read "dotenv" and the
+// unset endpoint must read "unset".
+func TestJevStatusReportsSourcesWithoutTheKeyValue(t *testing.T) {
+	repo := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(repo, store.Root), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, store.Root, ".env"), []byte("OPENROUTER_API_KEY=s3cret\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unsetenv(t, "OPENROUTER_API_KEY")
+	unsetenv(t, "OPENRECORD_JEV_ENDPOINT")
+
+	_, stdout, _ := runIn(t, repo, "jev", "status")
+	report := decode[jevStatusReport](t, stdout)
+	if report.Sources.Key != "dotenv" {
+		t.Errorf("sources.key = %q, want %q", report.Sources.Key, "dotenv")
+	}
+	if report.Sources.Endpoint != "unset" {
+		t.Errorf("sources.endpoint = %q, want %q", report.Sources.Endpoint, "unset")
+	}
+	if strings.Contains(stdout, "s3cret") {
+		t.Error("the key value leaked into the report")
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/projectenv"
 )
 
 // Errorf is the local spelling of finding.Errorf, so command code reads without
@@ -21,6 +22,10 @@ type Env struct {
 	Stderr io.Writer
 	// Repo is the repository root every store path resolves against.
 	Repo string
+	// Vars is this invocation's merged environment — process env over
+	// `.openrecord/.env`, loaded once in Run before any command runs. It
+	// carries no pinned path: qmdRuntime folds those in per call, never here.
+	Vars projectenv.Vars
 }
 
 // WriteJSON emits a result on stdout. Indented because a human reads it as often

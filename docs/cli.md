@@ -429,9 +429,11 @@ naming one scoped path exactly; a path containing a comma is kept whole, never s
 argument is accepted.
 
 **`qmd` and `OPENROUTER_API_KEY` are both required.** There is no degraded mode: a missing key, an
-absent or unusable `qmd`, or a failing Jev request each fail the whole command before anything is
-served or stored, naming the fix (`openrecord qmd install`, `OPENROUTER_API_KEY`, or
-`openrecord jev status`).
+absent or unusable `qmd`, a project that has never run `openrecord qmd index` (or one missing a
+collection this scope needs), or a failing Jev request each fail the whole command before anything is
+served or stored, naming the fix (`openrecord qmd install`, `openrecord qmd index`,
+`OPENROUTER_API_KEY`, or `openrecord jev status`). The not-indexed case fails before a Jev request is
+ever built — Jev sees nothing either way.
 
 ### The serving rule
 
@@ -569,6 +571,59 @@ than read. The topics stay out of it — they name nothing and exist to be read.
 
 ---
 
+## `.openrecord/.env`
+
+Every command merges one project-scoped environment before it runs: `.openrecord/.env`, under the
+process environment, under a small set of paths openrecord pins itself and that neither layer can
+move. Nothing here is openrecord's own configuration — it is how `qmd` and Jev are configured per
+project, read once per invocation and merged the same way every time.
+
+### Grammar
+
+```
+# a comment, and the blank line above are both ignored
+A="x y"
+B='z'
+C=$HOME
+```
+
+`KEY=VALUE`, one per line. A key matches `[A-Za-z_][A-Za-z0-9_]*`; a `#`-prefixed or blank line is
+skipped. One matching `'…'`/`"…"` pair is stripped from the value — nothing else is: there is no
+expansion and no `export`, so `C=$HOME` above is the four literal characters `$HOME`, not the shell
+variable. A missing file, or a missing `.openrecord/` entirely, counts as empty, never an error.
+
+Any other line — including `export K=v`, or a key declared twice — fails the command that read it: a
+`usage` finding naming the file and the exact line, exit code 2, before that command does anything
+else.
+
+### Precedence
+
+Highest first: the paths openrecord pins itself (`QMD_CONFIG_DIR`, `INDEX_PATH` — see `qmd` below,
+never overridable), then the process environment, then `.env`. Each key reaches a subprocess exactly
+once, at whichever layer governs it — `.env` can set a model or a credential, but neither it nor the
+process environment can ever move where this project's own index lives.
+
+### Where a value came from
+
+`qmd status` and `jev status` report, per key, whether it currently comes from `env`, `dotenv`, or is
+`unset` — never the value itself. A pinned path is never reported this way: it is never something the
+project or its environment chose.
+
+```
+openrecord qmd status
+→ "sources": {"QMD_EMBED_MODEL": "dotenv", "QMD_OPENAI_API_KEY": "env", "QMD_RERANK_URL": "unset", ...}
+```
+
+### Never committed
+
+`.openrecord/.gitignore` gains a `/.env` line the first time any command runs against a declared store
+(one whose components file already exists) — a hand-made `.env`, including one left by an older
+openrecord, is protected from that point on. `.openrecord/.qmd/` ignores itself completely the moment
+it is created. Neither ever shows up in `git status`, with or without `--untracked-files=all`; every
+other file under `.openrecord/` still does.
+
+---
+
 ## `qmd`
 
 Semantic search is a separate project and openrecord does not own it. These two subcommands are how
@@ -619,6 +674,20 @@ does not run would otherwise leave a caller with no way forward through openreco
 The pinned version is named in two places — the binary and `scripts/install.sh` — and a test fails if
 they drift, because nothing else would notice: the script would install one version while the binary
 reported a mismatch against the other.
+
+**`index`** registers and embeds this project's own collections — one per declared component plus
+specs — into a qmd index this project owns outright, under `.openrecord/.qmd/`, never the global one. A
+re-run is incremental: it only adds a collection that is not registered yet, and leaves an existing one
+and its pinned model untouched. `--rebuild` deletes `.openrecord/.qmd/` first and rebuilds every
+collection from scratch, which is the supported way to pick up a different embedding model.
+
+```
+openrecord qmd index
+openrecord qmd index --rebuild
+```
+
+`search` requires a project that has already run this at least once; without it, `search` fails naming
+`openrecord qmd index` rather than silently searching nothing.
 
 ### Why a pinned release and not the latest one
 

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/projectenv"
 )
 
 // Command is one entry in the command tree. A command either runs or holds
@@ -75,11 +76,31 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return exitUsage
 	}
 
-	if err := command.Run(env, rest); err != nil {
+	// Loaded here, after resolve and right before the command actually runs,
+	// so `--help`, the overview and an unknown command never depend on
+	// `.openrecord/.env` at all. A malformed file fails every runnable
+	// command the same way takeRepoFlag and resolve already do: this
+	// invocation's own usage error, exit 2 — never the generic exitFailure a
+	// command's own error takes below.
+	vars, err := projectenv.Load(env.Repo)
+	if err != nil {
+		env.WriteFailure(err)
+		_ = projectenv.EnsureIgnored(env.Repo)
+		return exitUsage
+	}
+	env.Vars = vars
+
+	runErr := command.Run(env, rest)
+	// Best-effort and after every dispatched command regardless of outcome:
+	// a hand-made `.openrecord/.env` is protected the moment a declared
+	// store first runs a gated command, and a failure here must never mask
+	// or replace the command's own result.
+	_ = projectenv.EnsureIgnored(env.Repo)
+	if runErr != nil {
 		// A command that already reported on stdout fails without repeating
 		// itself on stderr.
-		if _, quiet := err.(silentError); !quiet {
-			env.WriteFailure(err)
+		if _, quiet := runErr.(silentError); !quiet {
+			env.WriteFailure(runErr)
 		}
 		return exitFailure
 	}

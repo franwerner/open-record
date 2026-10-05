@@ -75,10 +75,11 @@ one — and it fails quietly, by returning the wrong project's records rather th
 
 ## Set the provider up before registering anything
 
-Without a working provider, registration still *succeeds*: `qmd collection add` indexes the text and
-only the embedding pass needs the provider. So the failure arrives after every collection is registered
-and half-built — searches then return real-looking results over a fraction of the store, and nothing
-announces the gap. Which is why every step below comes before the first `collection add`.
+Without a working provider, registration still *succeeds*: `openrecord qmd index` registers every
+collection and only the embedding pass at the end needs the provider. So the failure arrives after
+every collection is registered and half-built — searches then return real-looking results over a
+fraction of the store, and nothing announces the gap. Which is why every step below comes before the
+first `openrecord qmd index`.
 
 **A fresh qmd is not configured for a hosted provider.** It starts on local models it has not
 downloaded, so an install that looks fine fails at the first embed with *"Failed to get embedding
@@ -110,40 +111,49 @@ openrecord qmd status
 ```
 
 `usable: false` means it is on the PATH and does not run — reinstall with
-`openrecord qmd install --force` before anything else. `collections_needed` is the list to register
-below; take the names from there rather than composing them.
+`openrecord qmd install --force` before anything else. `collections_needed` is what
+`openrecord qmd index` will register; `sources` shows, for each model and credential key, whether it
+currently comes from `env`, `dotenv` or is `unset` — never the value itself.
 
-**2. Point qmd at what the user chose.** The models go in its index config, `~/.config/qmd/index.yml` —
-these two values being an example of the shape, not a recommendation:
-
-```yaml
-models:
-  embed: openai/text-embedding-3-small
-  generate: openai/gpt-4o-mini
-```
-
-**The index config wins over the environment.** `QMD_EMBED_MODEL` only applies when that file names no
-model, and `collection add` writes the local defaults into it — so a model set only by environment
-variable stops taking effect the moment the first collection is registered, silently. Set it in the
-file. Writing it before registering is safe: `collection add` fills in what is missing and leaves what
-is there. This part is qmd's behaviour, not a preference: it holds for local models too.
-
-**3. Put the credentials in the environment** — **never in a file that gets committed.** A store is
-versioned and shared; a key in it is a key published. A local setup needs none of this and skips to 4.
+**2. Point qmd at what the user chose, in `.openrecord/.env`** — not qmd's own global config, and not
+the shell. Every openrecord command for this project merges this file under the process environment and
+pins it onto every qmd call it makes, so a value set here governs this project and nothing else:
 
 ```
-export QMD_OPENAI_API_KEY=...
-export QMD_OPENAI_BASE_URL=https://openrouter.ai/api/v1
+# .openrecord/.env
+QMD_EMBED_MODEL=openai/text-embedding-3-small
+QMD_GENERATE_MODEL=openai/gpt-4o-mini
+```
+
+These two values are an example of the shape, not a recommendation. `openrecord` creates
+`.openrecord/.qmd/` as this project's own, private qmd state — separate from the global
+`~/.config/qmd`, and from any other project's — so the model a collection is built with is this
+project's choice alone, recorded the moment `openrecord qmd index` first registers something.
+
+**3. Put the credentials in the same file.** `.openrecord/.env` is git-ignored automatically the first
+time any openrecord command runs against a declared store — a hand-made one, or one from an older
+version of openrecord, is protected the moment that happens. A store is still versioned and shared, so
+a key belongs in this file, never in a record or in `components.json`:
+
+```
+# .openrecord/.env
+QMD_OPENAI_API_KEY=...
+QMD_OPENAI_BASE_URL=https://openrouter.ai/api/v1
 ```
 
 Again the shape, not the values: the endpoint is the user's, and the variable names are the ones qmd
 reads for an OpenAI-compatible provider. A different kind of backend reads different ones — that is
-qmd's documentation to answer, not this skill's.
+qmd's documentation to answer, not this skill's. The process environment still works too, and still
+wins over `.env` when both set the same key (useful for CI, where there is no file to commit at all) —
+but there is no longer a reason to keep secrets out of this one file.
 
-**4. Confirm it before spending a registration on it.**
+**4. Confirm it before spending a registration on it.** Raw `qmd doctor` and `qmd status` read the
+*global* qmd state unless told otherwise — this project's state lives under
+`.openrecord/.qmd/`, which only openrecord's own commands address automatically. Point a raw qmd call
+at it the same way openrecord does internally:
 
 ```
-qmd doctor
+QMD_CONFIG_DIR="$(pwd)/.openrecord/.qmd" INDEX_PATH="$(pwd)/.openrecord/.qmd/index.sqlite" qmd doctor
 ```
 
 Two lines say whether the configuration took:
@@ -151,61 +161,48 @@ Two lines say whether the configuration took:
 - **`model cache: missing`** — read it against what was chosen. Naming **local** models: they have to
   be downloaded, so run `qmd pull` before going on. Naming **hosted** models: expected and not a
   problem, since those are not files and there is nothing to cache. Naming models **nobody chose** —
-  qmd's own defaults, when a hosted provider was the choice — means the config above is not being
+  qmd's own defaults, when a hosted provider was the choice — means `.openrecord/.env` is not being
   read, and that is what to fix.
-- **`QMD_EMBED_MODEL is set to X but index config uses Y`** — the file is winning, as it should. Fix
-  the file.
+- **`QMD_EMBED_MODEL is set to X but index config uses Y`** — the project's own index config, written at
+  the first `openrecord qmd index`, is winning over a later `.env` edit, as it should once a collection
+  exists. Change the model with `openrecord qmd index --rebuild` instead of editing the file directly.
 
-The third line, **`search provider`**, cannot answer yet. Nothing has been embedded, so `doctor` has no
-chunk to re-embed and reports `not exercised by these checks, so nothing is claimed about it` — which
-is the honest answer on a fresh index, not a failure. **Do not stop on it here.**
-
-Where it does bite is on an index that already has vectors: there, `doctor` re-embeds a sample, and a
-provider that is failing — an expired key shows as a `401` — makes it say so and exit non-zero. Then
-you stop, and you do not register collections that cannot be embedded.
-
-On a fresh index the provider is confirmed one step later, by the embed itself.
+The third line, **`search provider`**, cannot answer yet on a fresh project — there is no chunk to
+re-embed, so `doctor` reports `not exercised by these checks, so nothing is claimed about it`, which is
+the honest answer here, not a failure. **Do not stop on it.** The provider is confirmed one step later,
+by the embed `openrecord qmd index` runs itself.
 
 ## Register
 
-One command per collection, and it indexes as it registers. The names are the ones
-`collections_needed` gave you:
-
 ```
-qmd collection add "$(pwd)/.openrecord/decisions/api" \
-    --name myproject-decisions-api --mask '**/*.md'
-
-qmd collection add "$(pwd)/.openrecord/specs" \
-    --name myproject-specs --mask '**/*.md'
+openrecord qmd index
 ```
 
-Then embed, once, and confirm nothing is left pending:
+One command: it reads `collections_needed` itself, registers whatever is missing, re-embeds whatever it
+kept, and runs the embedding pass — all against this project's own, pinned qmd state, never the global
+one. Its own output says what it added, what it kept, and whether the embed finished:
 
-```
-qmd embed
-qmd status        # "Pending: 0 need embedding"
-qmd doctor        # "search provider: answered every call made during these checks"
+```json
+{"project":"myproject","project_index_dir":"/abs/.openrecord/.qmd","rebuilt":false,
+ "added":["myproject-decisions-api","myproject-specs"],"kept":[],"skipped":[],
+ "unmanaged":[],"embedded":true}
 ```
 
-A run that ends with documents still pending is the half-built state above. It is not done until that
-number is zero.
+`"embedded": false` or a non-zero exit is the half-built state above — the command failed before
+reaching the embed, and nothing announces a silent gap because there is none: a provider failure here
+is a hard failure, not a quiet one.
 
 ## The whole thing, in order
 
-The **order** is the part that generalises. What goes in steps 2 and 3 is whatever the user chose, and
-the credential line is only there for a hosted provider.
+The **order** is the part that generalises. What goes into `.openrecord/.env` in steps 2 and 3 is
+whatever the user chose, and the credential line is only there for a hosted provider.
 
 ```
-ask                                        # local models, or a hosted API? which?
-openrecord qmd status                      # usable? which collections?
-$EDITOR ~/.config/qmd/index.yml            # models: embed / generate — theirs
-export <the variables their provider needs>
-qmd pull                                   # local models only
-qmd doctor                                 # models resolved? (provider: see above)
-qmd collection add <abs path> --name <from collections_needed> --mask '**/*.md'
-qmd embed                                  # this is what proves the provider
-qmd status                                 # Pending: 0
-qmd doctor                                 # search provider: answered every call
+ask                                                # local models, or a hosted API? which?
+openrecord qmd status                              # usable? which collections? current sources?
+$EDITOR .openrecord/.env                           # models + credentials — theirs, this project's own
+QMD_CONFIG_DIR="$(pwd)/.openrecord/.qmd" qmd pull   # local models only — this project's own cache
+openrecord qmd index                               # registers, updates, embeds — exits non-zero on failure
 ```
 
 ## Re-run it when the components change
@@ -214,11 +211,12 @@ A registration that no longer matches the repository **does not fail — it goes
 was supposed to cover simply stop being found, and nothing says why.
 
 Because decisions are one collection per component, this is the standing cost of the split: **a
-component added or removed leaves the registration stale.** Run this again then, and when the
-repository moves. It is cheap, and the failure it prevents is invisible.
+component added or removed leaves the registration stale.** `openrecord qmd index` is safe to run again
+any time the repository moves — it only adds what is missing and leaves what is already registered
+alone, so re-running it costs nothing when nothing changed.
 
 `openrecord map --for decisions` lists the declared components, which is what the collections should
-mirror. Anything in one and not the other is drift.
+mirror. Anything `qmd status`'s `collections_missing` names is drift; `openrecord qmd index` closes it.
 
 ## What this does not do
 

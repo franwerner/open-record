@@ -127,6 +127,13 @@ var commands = []*Command{
 				Flags:   describes(qmdInstallFlags),
 				Run:     runQmdInstall,
 			},
+			{
+				Name:    "index",
+				Summary: "Register and embed this project's collections, incrementally.",
+				Usage:   "openrecord qmd index [--rebuild]",
+				Flags:   describes(qmdIndexFlags),
+				Run:     runQmdIndex,
+			},
 		},
 	},
 	{

@@ -108,12 +108,17 @@ func runSearch(env Env, args []string) error {
 	}
 
 	// The key, before qmd: a missing key must send nothing to either.
-	client, err := jev.FromEnv(os.Getenv)
+	client, err := jev.FromEnv(env.Vars.Getenv)
 	if err != nil {
 		return Errorf(finding.CodeJevUnavailable, "%v", err)
 	}
 
-	qmdStatus := qmd.Probe()
+	rt, err := qmdRuntime(env)
+	if err != nil {
+		return err
+	}
+
+	qmdStatus := qmd.Probe(rt)
 	if !qmdStatus.Installed {
 		return Errorf(finding.CodeQmdUnavailable, "qmd is not installed; install it with `openrecord qmd install`")
 	}
@@ -132,7 +137,7 @@ func runSearch(env Env, args []string) error {
 	}
 
 	project := filepath.Base(env.Repo)
-	semanticHits, err := scanSemantic(project, coordinates, semantic)
+	semanticHits, err := scanSemantic(project, coordinates, semantic, rt)
 	if err != nil {
 		return err
 	}
@@ -375,7 +380,13 @@ func scanLiteralFile(path string, terms, needles []string) (*review.Literal, err
 // A hit on an index, or on a collection outside the resolved set, is dropped:
 // groups are never in scope, and a hit naming a collection nobody queried
 // should never happen.
-func scanSemantic(project string, coordinates []store.Coordinate, semantic string) (map[string]review.Semantic, error) {
+//
+// D8: before anything else, every collection this search needs must already
+// be registered. An empty registration reads as "no index yet"; a partial
+// one names what is missing. Checked before capabilities or query — and
+// well before the caller ever builds a Jev request — so a project that has
+// never run `openrecord qmd index` sends nothing to either.
+func scanSemantic(project string, coordinates []store.Coordinate, semantic string, rt qmd.Runtime) (map[string]review.Semantic, error) {
 	byName := map[string]collectionScope{}
 	for _, coordinate := range coordinates {
 		for _, scope := range collectionsFor(project, coordinate) {
@@ -386,7 +397,30 @@ func scanSemantic(project string, coordinates []store.Coordinate, semantic strin
 		return map[string]review.Semantic{}, nil
 	}
 
-	capabilities, capErr := qmd.ReadCapabilities()
+	registered, err := qmd.ListCollections(rt)
+	if err != nil {
+		return nil, Errorf(finding.CodeQmdUnavailable, "qmd collection list: %v; see `openrecord qmd status`", err)
+	}
+	have := make(map[string]bool, len(registered))
+	for _, name := range registered {
+		have[name] = true
+	}
+	var missing []string
+	for name := range byName {
+		if !have[name] {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		if len(missing) == len(byName) {
+			return nil, Errorf(finding.CodeQmdNotIndexed, "no qmd index for this project yet; run `openrecord qmd index`")
+		}
+		return nil, Errorf(finding.CodeQmdNotIndexed,
+			"qmd index is missing %s; run `openrecord qmd index`", strings.Join(missing, ", "))
+	}
+
+	capabilities, capErr := qmd.ReadCapabilities(rt)
 	if capErr != nil {
 		return nil, Errorf(finding.CodeQmdUnavailable, "qmd capabilities: %v; see `openrecord qmd status`", capErr)
 	}
@@ -402,7 +436,7 @@ func scanSemantic(project string, coordinates []store.Coordinate, semantic strin
 	}
 	sort.Strings(names)
 
-	raw, err := qmd.Query(semantic, names)
+	raw, err := qmd.Query(semantic, names, rt)
 	if err != nil {
 		return nil, Errorf(finding.CodeQmdUnavailable, "qmd query: %v; see `openrecord qmd status`", err)
 	}

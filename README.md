@@ -230,8 +230,16 @@ never sent anywhere.
 ```bash
 openrecord qmd status     # installed, usable, and which collections this project needs
 openrecord qmd install    # install or reinstall it
+openrecord qmd index      # register every collection this project needs, then embed
 openrecord jev status     # is the key set, and does the endpoint answer
 ```
+
+`qmd index` builds this project's own index under `.openrecord/.qmd/`, never the global one — a re-run
+only adds what is missing, and `--rebuild` rebuilds it from scratch (the supported way to pick up a
+different embedding model). Put a model choice or a credential in `.openrecord/.env`, never in a
+committed file: it is merged into every qmd call automatically and is git-ignored the moment any
+command runs against a declared store. `search` fails naming `openrecord qmd index` until this has run
+at least once.
 
 `openrecord skills --emit <dir>` emits one variant: every bundled skill describes `search` as it
 actually behaves, with no flag to choose between describing a smaller tool and the real one.

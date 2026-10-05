@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"encoding/json"
 	"flag"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/store"
 )
 
 func run(t *testing.T, args ...string) (int, string, string) {
@@ -182,6 +185,112 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 // grep's Usage string must present --for as required, unbracketed, the same
 // shape as search's — a revert to the old [--for COORDINATE] form would go
 // unnoticed otherwise, since nothing else asserts this literal content.
+// writeMalformedEnv writes a `.openrecord/.env` whose only line is not
+// KEY=VALUE grammar — `export` is the one example the spec itself names.
+func writeMalformedEnv(t *testing.T, repo string) {
+	t.Helper()
+	dir := filepath.Join(repo, store.Root)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("export K=v\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// D3: the merged environment loads after resolve, right before a command
+// actually runs, so a malformed `.env` never reaches the overview, --help,
+// or the unknown-command path — only a runnable command ever sees it.
+func TestEnvLoadsAfterResolveSoHelpAndOverviewNeverTouchIt(t *testing.T) {
+	repo := t.TempDir()
+	writeMalformedEnv(t, repo)
+
+	if code, stdout, stderr := runIn(t, repo); code != exitOK {
+		t.Fatalf("the overview failed because of a malformed .env: exit %d (%s)", code, stderr)
+	} else if !strings.Contains(stdout, "openrecord") {
+		t.Errorf("overview did not print: %s", stdout)
+	}
+
+	if code, _, stderr := runIn(t, repo, "--help"); code != exitOK {
+		t.Fatalf("--help failed because of a malformed .env: exit %d (%s)", code, stderr)
+	}
+
+	code, _, stderr := runIn(t, repo, "nonsense")
+	if code != exitUsage {
+		t.Fatalf("unknown command exit = %d, want %d (stderr: %s)", code, exitUsage, stderr)
+	}
+	result := decode[finding.Finding](t, stderr)
+	if result.Code != finding.CodeUnknownCommand {
+		t.Errorf("code = %q, want %q — a malformed .env must not change what fails here", result.Code, finding.CodeUnknownCommand)
+	}
+}
+
+// ENV-2 / D3: a malformed `.env` fails any runnable command with its own
+// usage error, naming the file and line, and exits 2 — Run's own pre-dispatch
+// usage code, never the generic exitFailure a command's own error takes.
+func TestMalformedEnvFailsAnyRunnableCommandWithExitTwo(t *testing.T) {
+	repo := t.TempDir()
+	writeMalformedEnv(t, repo)
+
+	code, _, stderr := runIn(t, repo, "version")
+	if code != exitUsage {
+		t.Fatalf("exit = %d, want %d (stderr: %s)", code, exitUsage, stderr)
+	}
+	result := decode[finding.Finding](t, stderr)
+	if result.Code != finding.CodeUsage {
+		t.Errorf("code = %q, want %q", result.Code, finding.CodeUsage)
+	}
+	if !strings.Contains(result.Message, ".openrecord/.env:1") {
+		t.Errorf("message does not name the file and line: %q", result.Message)
+	}
+}
+
+// D11: EnsureIgnored runs after every dispatched command, whether or not it
+// succeeded, and only once the components file actually exists.
+func TestEnsureIgnoredRunsAfterASuccessfulCommandWhenDeclared(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+
+	raw, err := os.ReadFile(filepath.Join(repo, store.Root, ".gitignore"))
+	if err != nil {
+		t.Fatalf("reading .gitignore: %v", err)
+	}
+	if !strings.Contains(string(raw), "/.env") {
+		t.Errorf(".gitignore = %q, want it to carry /.env", raw)
+	}
+}
+
+func TestEnsureIgnoredRunsEvenWhenTheCommandFails(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+
+	// Remove what the first (successful) dispatch above already wrote, so
+	// this proves the second, FAILING dispatch below is what restored it —
+	// not leftover state from the first.
+	gitignore := filepath.Join(repo, store.Root, ".gitignore")
+	if err := os.Remove(gitignore); err != nil {
+		t.Fatal(err)
+	}
+
+	if code, _, _ := runIn(t, repo, "component", "add", "api",
+		"--path", "src/other", "--title", "API", "--description", "d"); code == exitOK {
+		t.Fatal("a duplicate component id was accepted")
+	}
+	if _, err := os.Stat(gitignore); err != nil {
+		t.Error("EnsureIgnored did not run after a failing command")
+	}
+}
+
+func TestEnsureIgnoredIsGatedOnTheComponentsFile(t *testing.T) {
+	repo := t.TempDir() // no component ever declared
+	if code, _, stderr := runIn(t, repo, "version"); code != exitOK {
+		t.Fatalf("version failed: %s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(repo, store.Root, ".gitignore")); err == nil {
+		t.Error("EnsureIgnored wrote .gitignore despite no declared components file")
+	}
+}
+
 func TestGrepUsagePresentsForAsRequired(t *testing.T) {
 	grep := find(commands, "grep")
 	if grep == nil {

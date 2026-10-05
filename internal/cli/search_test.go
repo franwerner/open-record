@@ -2,8 +2,10 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -11,14 +13,29 @@ import (
 	"testing"
 
 	"github.com/franwerner/open-record/internal/finding"
+	"github.com/franwerner/open-record/internal/qmd"
 	"github.com/franwerner/open-record/internal/store"
 )
 
 // noSemanticHits is a qmd stub that answers every subcommand search needs —
-// --version and status for Probe, capabilities for the embedding check — and
-// an empty query result, so every scenario here that is not itself about the
-// semantic pass gets no contribution from it.
-const noSemanticHits = `
+// --version and status for Probe, collection list for the D8 "is this
+// project indexed" check (reporting every collection repo's declared
+// components resolve to as already registered, so that check never trips
+// here), capabilities for the embedding check, and an empty query result —
+// so every scenario here that is not itself about the semantic pass, or
+// about D8 itself, gets no contribution from it.
+func noSemanticHits(repo string, components ...string) string {
+	project := filepath.Base(repo)
+	names := qmd.Collections(project, components)
+	entries := make([]string, len(names))
+	for index, name := range names {
+		entries[index] = fmt.Sprintf(`{"name":%q}`, name)
+	}
+	collections := fmt.Sprintf(`{"schemaVersion":1,"collections":[%s]}`, strings.Join(entries, ","))
+	return fmt.Sprintf(`
+case "$1 $2" in
+  "collection list") echo '%s'; exit 0 ;;
+esac
 case "$1" in
   --version|-v) echo "qmd 2.8.3-mate.7"; exit 0 ;;
   status) echo "QMD Status"; exit 0 ;;
@@ -26,7 +43,8 @@ case "$1" in
   query) echo '[]'; exit 0 ;;
   *) exit 0 ;;
 esac
-`
+`, collections)
+}
 
 // writeSearchRecord writes a record with an empty title and description, so
 // Jev's instruction falls back to the record's path as its title — which is
@@ -165,7 +183,7 @@ func TestSearchLiteralCommaStaysInOneTerm(t *testing.T) {
 	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
 	writeSearchRecord(t, repo, "decisions/api/security/a.md", "this record says a,b together")
 	writeSearchRecord(t, repo, "decisions/api/security/b.md", "this record only says a alone")
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, nil, 0.0)
 
 	report := decode[searchOutput](t, mustRun(t, repo,
@@ -194,7 +212,7 @@ func TestSearchServingFloorOfThreeAndDiscardedOrder(t *testing.T) {
 	for _, name := range []string{"a", "b", "c", "d", "e", "f", "g", "h", "i", "j"} {
 		writeSearchRecord(t, repo, "decisions/api/security/"+name+".md", "nothing special here")
 	}
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	// Every record ties at the same low score: the floor must still serve
 	// exactly 3, breaking the tie by path ascending.
 	stubJevEndpoint(t, nil, 0.05)
@@ -219,13 +237,59 @@ func TestSearchServingFloorOfThreeAndDiscardedOrder(t *testing.T) {
 	}
 }
 
+// RS-1 "Key from .env": with the key declared only in `.openrecord/.env`
+// and the process environment genuinely unset (unsetenv, not merely
+// emptied), the key must still reach Jev's Authorization header — proving
+// FromEnv is read through env.Vars.Getenv (the merged dotenv+process view),
+// never through the process environment directly.
+func TestSearchReadsTheKeyFromDotenvWhenProcessEnvIsUnset(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+	writeSearchRecord(t, repo, "decisions/api/security/a.md", "nothing special here")
+	stubQmd(t, noSemanticHits(repo, "api"))
+
+	var gotAuth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		var body struct {
+			Questions map[string]any `json:"questions"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		answers := make(map[string]map[string]float64, len(body.Questions))
+		for name := range body.Questions {
+			answers[name] = map[string]float64{"noul": 0.5}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"answers": answers})
+	}))
+	t.Cleanup(server.Close)
+
+	unsetenv(t, "OPENROUTER_API_KEY")
+	t.Setenv("OPENRECORD_JEV_ENDPOINT", server.URL)
+	if err := os.MkdirAll(filepath.Join(repo, store.Root), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, store.Root, ".env"), []byte("OPENROUTER_API_KEY=dotenv-only-key\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report := decode[searchOutput](t, mustRun(t, repo,
+		searchArgs(map[string]string{"--literal": "unmatched-term"})...))
+	if len(report.Records) == 0 {
+		t.Fatal("nothing was served")
+	}
+	if gotAuth != "Bearer dotenv-only-key" {
+		t.Errorf("authorization = %q, want the key declared only in .openrecord/.env", gotAuth)
+	}
+}
+
 func TestSearchServingEveryRecordAboveThreshold(t *testing.T) {
 	repo := project(t)
 	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
 	for _, name := range []string{"a", "b", "c", "d", "e"} {
 		writeSearchRecord(t, repo, "decisions/api/security/"+name+".md", "nothing special")
 	}
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, nil, 0.5)
 
 	report := decode[searchOutput](t, mustRun(t, repo,
@@ -244,7 +308,7 @@ func TestSearchServingSmallScope(t *testing.T) {
 	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
 	writeSearchRecord(t, repo, "decisions/api/security/a.md", "x")
 	writeSearchRecord(t, repo, "decisions/api/security/b.md", "x")
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, nil, 0.0)
 
 	report := decode[searchOutput](t, mustRun(t, repo,
@@ -266,7 +330,7 @@ func TestSearchServingALowScoreLiteralHitStillServes(t *testing.T) {
 	writeSearchRecord(t, repo, "decisions/api/security/high3.md", "x")
 	writeSearchRecord(t, repo, "decisions/api/security/low.md", "this one mentions needle")
 	writeSearchRecord(t, repo, "decisions/api/security/discarded.md", "x")
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, map[string]float64{
 		"decisions/api/security/high1.md":     0.9,
 		"decisions/api/security/high2.md":     0.8,
@@ -295,7 +359,7 @@ func TestSearchOmitRemovesAndCounts(t *testing.T) {
 	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
 	writeSearchRecord(t, repo, "decisions/api/security/a.md", "x")
 	writeSearchRecord(t, repo, "decisions/api/security/b.md", "x")
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, nil, 0.0)
 
 	report := decode[searchOutput](t, mustRun(t, repo,
@@ -323,7 +387,7 @@ func TestSearchOmitOfAnUnscopedPathCountsZero(t *testing.T) {
 	repo := project(t)
 	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
 	writeSearchRecord(t, repo, "decisions/api/security/a.md", "x")
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, nil, 0.0)
 
 	report := decode[searchOutput](t, mustRun(t, repo,
@@ -341,7 +405,7 @@ func TestSearchGroupOnlyLiteralHitServesNothing(t *testing.T) {
 	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API",
 		"--description", "A very-distinctive-zzqux word only the index carries.")
 	writeSearchRecord(t, repo, "decisions/api/security/a.md", "nothing related here")
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, nil, 0.0)
 
 	report := decode[searchOutput](t, mustRun(t, repo,
@@ -384,6 +448,50 @@ func TestSearchChecksTheKeyBeforeAnyJevRequest(t *testing.T) {
 	}
 }
 
+// D8 (RS-2): with a usable qmd but nothing registered yet — the state before
+// `openrecord qmd index` has ever run — search must fail naming that
+// command, and the Jev double must never be contacted: the check runs
+// before capabilities or query, well before any item is ever scored.
+func TestSearchFailsWhenNothingIsIndexedYet(t *testing.T) {
+	repo := project(t)
+	mustRun(t, repo, "component", "add", "api", "--path", "src/api", "--title", "API", "--description", "d")
+	writeSearchRecord(t, repo, "decisions/api/security/a.md", "x")
+
+	stubQmd(t, `
+case "$1 $2" in
+  "collection list") echo '{"schemaVersion":1,"collections":[]}'; exit 0 ;;
+esac
+case "$1" in
+  --version|-v) echo "qmd 2.8.3-mate.7"; exit 0 ;;
+  status) echo "QMD Status"; exit 0 ;;
+  *) exit 0 ;;
+esac
+`)
+
+	var called bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	}))
+	defer server.Close()
+	t.Setenv("OPENROUTER_API_KEY", "a-key")
+	t.Setenv("OPENRECORD_JEV_ENDPOINT", server.URL)
+
+	code, _, stderr := runIn(t, repo, searchArgs(nil)...)
+	if code == exitOK {
+		t.Fatal("search with no project index was accepted")
+	}
+	if called {
+		t.Error("a request reached the Jev endpoint despite no project index being built")
+	}
+	result := decode[finding.Finding](t, stderr)
+	if result.Code != finding.CodeQmdNotIndexed {
+		t.Errorf("code = %q, want %q", result.Code, finding.CodeQmdNotIndexed)
+	}
+	if !strings.Contains(result.Message, "openrecord qmd index") {
+		t.Errorf("message does not name `openrecord qmd index`: %q", result.Message)
+	}
+}
+
 // The output must not depend on how many Jev chunks the scope was split
 // across. Each item's description is inflated well past the default token
 // budget, forcing more than one request; the merged scores must still rank
@@ -400,7 +508,7 @@ func TestSearchMergesScoresAcrossMultipleJevChunks(t *testing.T) {
 	for _, p := range paths {
 		writeSearchRecordWithDescription(t, repo, p, big, "irrelevant body")
 	}
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	stubJevEndpoint(t, map[string]float64{
 		paths[0]: 0.9, paths[1]: 0.1, paths[2]: 0.95, paths[3]: 0.05, paths[4]: 0.3,
 	}, 0.0)
@@ -437,7 +545,7 @@ func TestSearchFailsWithUsageWhenADescriptionExceedsTheBudget(t *testing.T) {
 	// fixed wording instructionFor wraps around it.
 	tooBig := strings.Repeat("x ", 90000)
 	writeSearchRecordWithDescription(t, repo, "decisions/api/security/a.md", tooBig, "irrelevant body")
-	stubQmd(t, noSemanticHits)
+	stubQmd(t, noSemanticHits(repo, "api"))
 	// Never actually contacted: chunkPlan refuses before Score sends
 	// anything. Still pointed at a loopback double, not the real default
 	// endpoint, so a regression that did send a request could not reach out.

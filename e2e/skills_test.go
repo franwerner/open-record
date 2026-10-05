@@ -124,7 +124,7 @@ func TestWhatIsEmittedDoesNotDependOnWhatIsInstalled(t *testing.T) {
 	repo := project(t)
 
 	qmdPresent := filepath.Join(t.TempDir(), "a")
-	runWith(t, repo, stubQmd(t, workingQmdWithEmbeddings), "skills", "--emit", qmdPresent)
+	runWith(t, repo, stubQmd(t, workingQmdWithEmbeddings(repo)), "skills", "--emit", qmdPresent)
 
 	qmdAbsent := filepath.Join(t.TempDir(), "b")
 	runWith(t, repo, stubQmd(t, ""), "skills", "--emit", qmdAbsent)
