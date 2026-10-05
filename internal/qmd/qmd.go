@@ -1,12 +1,13 @@
 // Package qmd reports on the semantic-search tool, runs a query against it, and
 // installs it on request.
 //
-// openrecord does not own qmd — it is a separate project, optional by design,
-// and everything here degrades to "not installed", or for a query to running the
-// keyword half alone, rather than failing. What this package still does NOT do
-// is inspect qmd's own state as qmd keeps it: which collections are registered
-// lives in its configuration, in its format, and reading that would break the
-// day it changes.
+// openrecord does not own qmd — it is a separate project — but qmd is required:
+// `search` cannot run without it, and there is no degraded mode. Check, Probe
+// and Install still report every way qmd can be absent or broken, since a
+// caller needs to know what is wrong before it can act on `qmd install` or
+// `qmd status`. What this package still does NOT do is inspect qmd's own state
+// as qmd keeps it: which collections are registered lives in its configuration,
+// in its format, and reading that would break the day it changes.
 //
 // The one thing this package DOES read from qmd is `qmd capabilities --json` —
 // a published, versioned surface qmd exposes for exactly one question, whether
@@ -109,6 +110,14 @@ func version(path string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(output))
+}
+
+// collapseLines joins a possibly multi-line query into one line. The query
+// document is itself one line per half (`vec: ...`), so an embedded newline
+// in the caller's text would otherwise be read as the start of a second,
+// unintended line.
+func collapseLines(text string) string {
+	return strings.Join(strings.Fields(text), " ")
 }
 
 // firstLine keeps the line a person would read, out of whatever a failing
@@ -239,15 +248,16 @@ func ReadCapabilities() (Capabilities, error) {
 	return report, nil
 }
 
-// Query runs one qmd query subprocess and decodes its bare array of hits.
+// Query runs one qmd query subprocess for the semantic half and decodes its
+// bare array of hits.
 //
-// semantic decides whether the document carries the keyword half alone or
-// both halves — a decision made in advance, by ReadCapabilities, never by
-// Query itself. Query is still its own probe: it does its own exec.LookPath,
-// runs under its own time bound, and returns an error rather than a partial
-// result for an absent binary, a non-zero exit, a timeout, or output that does
-// not parse as the bare array the typed query promises.
-func Query(term string, collections []string, semantic bool) ([]Hit, error) {
+// qmd is required now — see the package doc — so this sends only the vec
+// document; there is no keyword half and no degrade path left to choose
+// between. Query is still its own probe: it does its own exec.LookPath, runs
+// under its own time bound, and returns an error rather than a partial result
+// for an absent binary, a non-zero exit, a timeout, or output that does not
+// parse as the bare array the typed query promises.
+func Query(vec string, collections []string) ([]Hit, error) {
 	if len(collections) == 0 {
 		return nil, fmt.Errorf("qmd query: no collection to query")
 	}
@@ -256,10 +266,7 @@ func Query(term string, collections []string, semantic bool) ([]Hit, error) {
 		return nil, err
 	}
 
-	document := "lex: " + term
-	if semantic {
-		document += "\nvec: " + term
-	}
+	document := "vec: " + collapseLines(vec)
 
 	args := make([]string, 0, 4+2*len(collections))
 	args = append(args, "query", document, "--no-rerank", "--format", "json")

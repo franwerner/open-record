@@ -125,6 +125,6 @@ func runQmdInstall(env Env, args []string) error {
 		"pinned_version": qmd.PinnedVersion,
 		// Emitting is what reconciles: the skills on disk still describe a
 		// smaller tool than the one now present, and nothing else notices.
-		"next": "re-emit each project's skills with `openrecord skills --emit <dir> --with-qmd`",
+		"next": "re-emit each project's skills with `openrecord skills --emit <dir>`",
 	})
 }

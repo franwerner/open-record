@@ -3,8 +3,10 @@
 A project's durable records: **what was chosen and why**, and **what the system does**. A directory
 layout, two kinds of document, and a CLI that reads and writes them.
 
-openrecord is not an agent framework and it never calls a model. Everything it does is deterministic;
-everything that needs judgement is prose a person or an agent writes.
+openrecord is not an agent framework. `search` is the one place a model runs at query time — the
+embedding model behind its meaning-based pass, and a ranking model (Jev, over OpenRouter) that scores
+every scoped record against the context you give it. Neither decides what governs your work; everything
+that needs judgement is prose a person or an agent writes.
 
 ## Two kinds of record
 
@@ -33,9 +35,9 @@ searching, rendering. Deterministic, with no opinion about *when* you should do 
 [cli.md](cli.md).
 
 **3 — Skills and search.** Guidance on top: how to populate a store, how to reconstruct records from
-existing code, when to write one at all — plus semantic search over the records, which is `qmd`, a
-separate project in its own repository. It consumes the two layers below; **nothing below depends on
-it.**
+existing code, when to write one at all — plus `qmd`, the separate project `search` registers against
+for its meaning-based pass. Unlike everything else at this layer, `search` itself requires it: there is
+no degraded mode without a usable qmd and `OPENROUTER_API_KEY`.
 
 The skills ride inside the binary and come out with `openrecord skills --emit <dir>`, but they are not
 part of the format or the tooling: strip them and layers 1 and 2 still work. openrecord itself takes no
@@ -53,7 +55,7 @@ judgement:
 | `openrecord-reconcile` | A record was just written or edited. Check it against the other records it could contradict. |
 | `openrecord-bootstrap` | An empty store. Fill it by asking the user, never by inferring. |
 | `openrecord-mine` | Code but no records. Reconstruct candidates; never write. |
-| `openrecord-setup-search` | Once per project, and only with `--with-qmd`. Registers the stores so records can be found by meaning. |
+| `openrecord-setup-search` | Once per project, before `search` is used at all. Registers the stores so records can be found by meaning. |
 
 ## The store
 
@@ -91,5 +93,5 @@ the way a host builds a list of available skills, so there is nothing to fall ou
 | --- | --- |
 | [decision-record.md](decision-record.md) | What a decision record is and is not, where it lives, its frontmatter and body. |
 | [capability-spec.md](capability-spec.md) | The same for capability specs, plus the four types and Mermaid rendering. |
-| [cli.md](cli.md) | The seven commands. |
+| [cli.md](cli.md) | Every command. |
 | [concerns.md](concerns.md) | The catalogue: eleven concerns and the places projects usually have a decision worth recording. |

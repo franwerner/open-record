@@ -8,6 +8,11 @@
 # script went green on a record whose body was a stale file from another user —
 # it only checked that a search returned something, never that what came back
 # was right.
+#
+# `search` now requires qmd (no degraded mode) and OPENROUTER_API_KEY (Jev
+# ranks every scoped record against --context at query time). qmd's own
+# embedding provider and OPENROUTER_API_KEY are both expected to arrive via
+# $HOME/creds.env, sourced below — this script does not set either itself.
 set -uo pipefail
 
 set -a; . "$HOME/creds.env"; set +a   # lo deja el arnés; ver TESTING.md
@@ -74,7 +79,7 @@ if [ "${BUILD_LOCAL:-no}" = "yes" ]; then
   # BASE_URL y VERSION vienen del entorno, y son lo único que cambia respecto de
   # lo que corre un usuario.
   step "1. Instalación del working tree, por su propio instalador"
-  WITH_QMD=no bash "$HOME/install.sh" 2>&1 | sed 's/^/    /'
+  bash "$HOME/install.sh" 2>&1 | sed 's/^/    /'
   hash -r
   check "$(rc command -v openrecord)" "0" "el instalador dejó el binario en el PATH"
   note "$(openrecord version | tr -d '\n ')"
@@ -82,13 +87,16 @@ if [ "${BUILD_LOCAL:-no}" = "yes" ]; then
         "${EXPECT_COMMIT}" "corre el commit que está en master ahora"
 else
   step "1. Instalación por la vía publicada"
-  curl -fsSL https://raw.githubusercontent.com/franwerner/open-record/master/scripts/install.sh | WITH_QMD=no bash 2>&1 | sed 's/^/    /'
+  curl -fsSL https://raw.githubusercontent.com/franwerner/open-record/master/scripts/install.sh | bash 2>&1 | sed 's/^/    /'
   hash -r
   check "$(jval 'print(d["version"])' openrecord version)" "0.2.0" "instaló v0.2.0"
 fi
 check "$(jval 'print(d["store_format"])' openrecord version)" "1" "formato de store 1"
 
-step "2. qmd, por la ruta que ofrece openrecord"
+step "2. qmd, instalado ya por el instalador (y de nuevo, por si no)"
+# El instalador ya lo dejó instalado — qmd es obligatorio para `search` ahora,
+# sin prompt. Esta llamada es idempotente: confirma el estado sin cambiar nada
+# si ya está, y lo arregla si por lo que sea no quedó usable.
 npm config set prefix "$HOME/.npm-global" >/dev/null 2>&1
 openrecord qmd install >/dev/null 2>&1; hash -r
 st() { jval "print(d[\"$1\"])" openrecord qmd status; }
@@ -264,11 +272,14 @@ check "$(jstr 'm=d["matches"];print(len(m),len({x["path"] for x in m}))' "$g")" 
 check "$(jstr 'print(d["matches"][0]["hits"]>1)' "$g")" "True" "y cuenta las líneas que coincidieron"
 
 step "8. Skills y emit"
-openrecord skills --emit .claude/skills/ --with-qmd >/dev/null
+# Una sola variante ahora: --with-qmd ya no existe, search requiere qmd, así
+# que setup-search viene siempre.
+openrecord skills --emit .claude/skills/ >/dev/null
 check "$(ls .claude/skills | sort | tr '\n' ' ')" \
       "openrecord-audit openrecord-bootstrap openrecord-capture openrecord-consult openrecord-mine openrecord-reconcile openrecord-setup-search " "las siete skills, todas con prefijo"
+check "$(rc openrecord skills --emit .claude/skills/ --with-qmd)" "1" "--with-qmd ya no existe — falla como flag desconocida"
 fp() { find .claude/skills -type f -exec sha256sum {} + | sort | sha256sum; }
-b="$(fp)"; openrecord skills --emit .claude/skills/ --with-qmd --dry-run >/dev/null
+b="$(fp)"; openrecord skills --emit .claude/skills/ --dry-run >/dev/null
 check "$(fp)" "$b" "--dry-run no tocó nada"
 
 # Las skills viajan dentro del binario, así que esto es lo único que dice si los
@@ -329,44 +340,49 @@ fi
 check "$(qmd doctor 2>&1 | grep -c 'search provider: answered every call')" "1" "después de embeber, el proveedor respondió"
 
 step "11. Las búsquedas: ¿devuelven lo correcto?"
-# Una sola llamada corre las dos pasadas. Lo que se comprueba no es que algo
-# vuelva, sino que vuelva EL record, como coordenada del store, y que el
-# envelope diga honestamente qué mitades corrieron.
+# Una sola llamada corre el pase literal, el pase semántico y el ranking de
+# Jev contra --context. Lo que se comprueba no es que algo vuelva, sino que
+# vuelva EL record, como coordenada del store — nunca una URL qmd://.
 Q='what keeps a retried request from charging twice'
 note "pregunta: $Q"
 check "$(jval 'print(len(d["matches"]))' openrecord grep 'retried' --for decisions/api)" "0" "el literal solo no encuentra nada — no está esa palabra"
-r="$(openrecord search "$Q" --for decisions/api 2>/dev/null)"
-note "semantic: $(jstr 'print(d["semantic"])' "$r")  ·  $(jstr 'print(len(d["matches"]))' "$r") resultado(s)"
-check "$(jstr 'print(d["semantic"])' "$r")" "used" "las dos pasadas corrieron — hay modelo de embeddings"
-check "$(jstr 'print(any("idempotency-key-required" in m["path"] for m in d["matches"]))' "$r")" \
-      "True" "y el record correcto está entre los resultados"
-check "$(jstr 'print(any(m["path"].startswith("qmd://") for m in d["matches"]))' "$r")" \
+r="$(openrecord search --for decisions/api --literal idempotency --semantic "$Q" --context "$Q" 2>/dev/null)"
+note "records: $(jstr 'print(len(d["records"]))' "$r")  ·  discarded: $(jstr 'print(len(d["discarded"]))' "$r")  ·  omitted: $(jstr 'print(d["omitted"])' "$r")"
+check "$(jstr 'print(any("idempotency-key-required" in rec["path"] for rec in d["records"]))' "$r")" \
+      "True" "y el record correcto está entre los servidos"
+check "$(jstr 'print(any(rec["path"].startswith("qmd://") for rec in d["records"]))' "$r")" \
       "False" "ninguna ruta vuelve como URL de qmd — el binario ya las tradujo"
+check "$(jstr 'print(d["id"] != "")' "$r")" "True" "la búsqueda quedó guardada bajo un id"
 Q2='why a queue was rejected for background work'
-r2="$(openrecord search "$Q2" --for decisions/worker 2>/dev/null)"
-# Sin "el primer resultado": search ordena por ruta y nunca puntúa, así que el
-# primero no es el más relevante — decirlo invita a leerlo como un ranking.
-note "pregunta: $Q2  →  $(jstr 'print(d["semantic"])' "$r2")  ·  $(jstr 'print(len(d["matches"]))' "$r2") resultado(s)"
-check "$(jstr 'print(all(m["path"].startswith("decisions/worker/") for m in d["matches"]) and len(d["matches"]) > 0)' "$r2")" \
+r2="$(openrecord search --for decisions/worker --literal queue --semantic "$Q2" --context "$Q2" 2>/dev/null)"
+note "pregunta: $Q2  →  $(jstr 'print(len(d["records"]))' "$r2") servido(s), $(jstr 'print(len(d["discarded"]))' "$r2") descartado(s)"
+check "$(jstr 'print(all(rec["path"].startswith("decisions/worker/") for rec in d["records"]) and len(d["records"]) > 0)' "$r2")" \
       "True" "una consulta acotada a una superficie devuelve solo la suya"
-check "$(jstr 'print(d["omitted"])' "$(openrecord search "$Q" --for decisions/api --omit decisions/api/security/idempotency-key-required.md 2>/dev/null)")" \
-      "1" "--omit resta lo que el descenso ya había traído"
+check "$(jstr 'print(d["omitted"])' "$(openrecord search --for decisions/api --literal idempotency --semantic "$Q" --context "$Q" --omit decisions/api/security/idempotency-key-required.md 2>/dev/null)")" \
+      "1" "--omit resta lo que ya se había traído"
 
-step "12. Proveedor caído: no puede parecer un resultado vacío"
+step "11b. Review: abrir, marcar y chequear el estado"
+sid="$(jstr 'print(d["id"])' "$r")"
+first_path="$(jstr 'print(d["records"][0]["path"])' "$r")"
+check "$(rc openrecord review mark "$sid" "$first_path" --verdict governs)" "1" "marcar sin haber abierto antes falla"
+check "$(rc openrecord review open "$sid" "$first_path")" "0" "review open sobre un record servido"
+check "$(rc openrecord review mark "$sid" "$first_path" --verdict governs)" "0" "una vez abierto, mark funciona"
+check "$(jstr 'print(d["verdict"])' "$(openrecord review mark "$sid" "$first_path" --verdict unrelated 2>/dev/null)")" \
+      "unrelated" "remarcar reemplaza el verdict anterior"
+
+step "12. Proveedor caído: search no puede fingir que funcionó"
 bad_key() { QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA "$@" >/dev/null 2>&1; echo $?; }
 QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA qmd vsearch "$Q" -c work-specs 2>&1 | tail -2 | sed 's/^/    /'
 check "$(bad_key qmd vsearch "$Q" -c work-specs)" "1" "la búsqueda de qmd sale 1"
 check "$(bad_key qmd vsearch "$Q" -c work-specs --format json)" "1" "y también con --format json"
 check "$(bad_key qmd doctor)" "1" "qmd doctor sale 1"
-# openrecord no hereda esa caída: degrada, sigue devolviendo lo literal, y no
-# afirma haber buscado por significado. Un resultado que miente sobre su
-# alcance es peor que uno vacío.
-# `bad` es el contador de fallas de este script — no pisarlo.
-degraded="$(QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA openrecord search 'idempotency' --for decisions/api 2>/dev/null)"
-check "$(bad_key openrecord search 'idempotency' --for decisions/api)" "0" "openrecord search no falla por el proveedor"
-check "$(jstr 'print(d["semantic"] in ("lexical-only", "unavailable"))' "$degraded")" \
-      "True" "y no afirma haber buscado por significado"
-check "$(jstr 'print(len(d["matches"]) > 0)' "$degraded")" "True" "los hits literales igual vuelven"
+# search ya no degrada: qmd es obligatorio ahora, así que un proveedor caído
+# hace fallar la búsqueda entera en vez de devolver silenciosamente menos de
+# lo prometido. `bad` es el contador de fallas de este script — no pisarlo.
+failure="$(QMD_OPENAI_API_KEY=sk-or-v1-INVALIDA openrecord search --for decisions/api --literal idempotency --semantic "$Q" --context "$Q" 2>&1)"
+check "$(bad_key openrecord search --for decisions/api --literal idempotency --semantic "$Q" --context "$Q")" \
+      "1" "search falla cuando el proveedor de qmd está caído"
+check "$(jstr 'print(d["code"])' "$failure")" "qmd-unavailable" "y el código dice qué fue lo que falló"
 check "$(rc qmd search 'zzzznoexistezzzz' -c work-specs)" "0" "una búsqueda sana que no encuentra nada sale 0"
 
 step "13. Estado final"

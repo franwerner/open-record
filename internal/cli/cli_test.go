@@ -161,6 +161,9 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 		"component owners": true,
 		"diagram":          true,
 		"qmd status":       true,
+		"jev status":       true,
+		"review open":      true,
+		"review status":    true,
 		"version":          true,
 	}
 	var walk func(prefix string, list []*Command)

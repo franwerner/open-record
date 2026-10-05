@@ -7,9 +7,6 @@
 # Environment variables:
 #   VERSION       Release tag to install (default: latest). Example: VERSION=v0.1.0
 #   INSTALL_DIR   Where to place the binary (default: $HOME/.local/bin)
-#   WITH_QMD      yes | no. Install semantic search too. Asked interactively when
-#                 unset and a terminal is attached; "no" otherwise, because a
-#                 piped install must never block waiting for an answer.
 #   BASE_URL      Where the release assets live (default: this repository's
 #                 GitHub releases). The tag and the asset name are still composed
 #                 here, so the archive has to sit at $BASE_URL/$VERSION/$asset.
@@ -20,7 +17,6 @@ REPO="franwerner/open-record"
 BINARY="openrecord"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 VERSION="${VERSION:-latest}"
-WITH_QMD="${WITH_QMD:-}"
 # Overridable so this script itself can be exercised against a locally built
 # release; until it was, the only installer anybody could test was the published one.
 BASE_URL="${BASE_URL:-https://github.com/$REPO/releases/download}"
@@ -72,27 +68,6 @@ resolve_version() {
   local tag="${url##*/}"
   [ -n "$tag" ] && [ "$tag" != "latest" ] || err "could not resolve the latest release; set VERSION=vX.Y.Z"
   echo "$tag"
-}
-
-# want_qmd resolves the one question this script asks. Semantic search is
-# optional by design, so the default is no: it pulls a Node toolchain and local
-# embedding models, and nothing in openrecord needs it.
-want_qmd() {
-  case "$WITH_QMD" in
-    yes|y|true|1) return 0 ;;
-    no|n|false|0) return 1 ;;
-  esac
-  # /dev/tty rather than stdin: this script is usually the right-hand side of a
-  # pipe, so stdin is the script itself and reading it would consume the body.
-  if [ ! -t 1 ] || [ ! -r /dev/tty ]; then
-    return 1
-  fi
-  printf "\nInstall qmd as well, so records can be found by meaning and not only by exact wording?\n"
-  printf "It is optional — without it, searches fall back to the deterministic steps and say so.\n"
-  printf "Install qmd? [y/N] "
-  local answer
-  read -r answer < /dev/tty || return 1
-  case "$answer" in y|Y|yes|YES) return 0 ;; *) return 1 ;; esac
 }
 
 # qmd_is_usable answers the question `command -v` cannot: does the qmd on the
@@ -165,19 +140,15 @@ main() {
     *) info "note: $INSTALL_DIR is not in your PATH" ;;
   esac
 
-  if want_qmd; then
-    install_qmd
-  fi
+  # qmd is always installed now: `openrecord search` requires it, and there is
+  # no degraded mode to fall back to without it.
+  install_qmd
 
   "$INSTALL_DIR/$BINARY" version
 
   printf "\nNext, in a project:\n"
   printf "  openrecord component add api --path src/api --title \"API\" --description \"...\"\n"
-  if command -v qmd >/dev/null 2>&1; then
-    printf "  openrecord skills --emit .claude/skills/ --with-qmd\n"
-  else
-    printf "  openrecord skills --emit .claude/skills/\n"
-  fi
+  printf "  openrecord skills --emit .claude/skills/\n"
 }
 
 main "$@"

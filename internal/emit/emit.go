@@ -35,21 +35,20 @@ type Entry struct {
 
 // Manifest is what the last successful emit left behind. It holds no content —
 // only enough to decide, later, whether a file is still ours to remove.
+//
+// A manifest written by an earlier build that still carries the retired
+// `with_qmd` field decodes cleanly: encoding/json ignores an unknown field on
+// read, and this build never writes it back. Removed and kept files are still
+// decided exactly as before — that decision only ever read Entries.
 type Manifest struct {
-	Version int    `json:"version"`
-	Emitter string `json:"emitter"`
-	// WithQmd records the variant that was emitted. Installing semantic search
-	// later leaves every project's skills stale in a way nothing else would
-	// notice: the files are intact and match what we wrote, they just describe
-	// a smaller tool than the one now present.
-	WithQmd bool    `json:"with_qmd"`
+	Version int     `json:"version"`
+	Emitter string  `json:"emitter"`
 	Entries []Entry `json:"entries"`
 }
 
 // Meta is what an emit records about itself, beyond the files.
 type Meta struct {
 	Emitter string
-	WithQmd bool
 }
 
 // File is one file to write.
@@ -142,7 +141,7 @@ func Apply(dir string, files []File, changes []Change, meta Meta) error {
 		byPath[file.Path] = file.Contents
 	}
 
-	manifest := Manifest{Version: manifestVersion, Emitter: meta.Emitter, WithQmd: meta.WithQmd}
+	manifest := Manifest{Version: manifestVersion, Emitter: meta.Emitter}
 	for _, change := range changes {
 		target := filepath.Join(dir, filepath.FromSlash(change.Path))
 		switch change.Action {

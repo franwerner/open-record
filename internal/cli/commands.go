@@ -85,8 +85,8 @@ var commands = []*Command{
 	},
 	{
 		Name:    "search",
-		Summary: "Literal search plus meaning, scoped to a coordinate, merged into one list.",
-		Usage:   "openrecord search TERM --for COORDINATE [--omit PATH]",
+		Summary: "Rank every scoped record against a context with Jev, and store the result for review.",
+		Usage:   "openrecord search --for COORDINATE --literal TERM --semantic QUERY --context TEXT [--omit PATH]",
 		Flags:   describes(searchFlags),
 		Run:     runSearch,
 	},
@@ -99,7 +99,7 @@ var commands = []*Command{
 	{
 		Name:    "skills",
 		Summary: "Emit the bundled agent skills into a directory.",
-		Usage:   "openrecord skills --emit DIR [--with-qmd] [--dry-run]",
+		Usage:   "openrecord skills --emit DIR [--dry-run]",
 		Flags:   describes(skillsFlags),
 		Run:     runSkills,
 	},
@@ -126,6 +126,43 @@ var commands = []*Command{
 				Usage:   "openrecord qmd install [--force]",
 				Flags:   describes(qmdInstallFlags),
 				Run:     runQmdInstall,
+			},
+		},
+	},
+	{
+		Name:    "jev",
+		Summary: "Report on the Jev decisions model that ranks search.",
+		Sub: []*Command{
+			{
+				Name:    "status",
+				Summary: "Whether the key is present and the endpoint is reachable.",
+				Usage:   "openrecord jev status",
+				Run:     runJevStatus,
+			},
+		},
+	},
+	{
+		Name:    "review",
+		Summary: "Open, mark and check a stored search's review.",
+		Sub: []*Command{
+			{
+				Name:    "open",
+				Summary: "Print a search's record and mark it opened.",
+				Usage:   "openrecord review open ID PATH",
+				Run:     runReviewOpen,
+			},
+			{
+				Name:    "mark",
+				Summary: "Store a verdict for a record that was opened earlier.",
+				Usage:   "openrecord review mark ID PATH --verdict governs|contradicts|unrelated",
+				Flags:   describes(reviewMarkFlags),
+				Run:     runReviewMark,
+			},
+			{
+				Name:    "status",
+				Summary: "Report each served record's verdict and whether the search is complete.",
+				Usage:   "openrecord review status ID",
+				Run:     runReviewStatus,
 			},
 		},
 	},

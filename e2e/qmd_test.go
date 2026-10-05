@@ -199,20 +199,57 @@ func TestQmdStatusNamesTheCollectionsWithoutQmd(t *testing.T) {
 	}
 }
 
-// workingQmd ends in `*) exit 0`, so it answers `capabilities --json` with
-// exit 0 and no output at all — which does not parse as JSON. This is the
-// real shape of any qmd release that predates the subcommand and simply does
-// not recognise it as a flag-carrying invocation deserving a jq-shaped
-// answer. Stated explicitly, since the failure mode this whole design guards
-// against is exactly this reading silently as "used".
-func TestSearchWithNoCapabilitiesSubcommandPinsToLexicalOnly(t *testing.T) {
+// workingQmdWithEmbeddings is workingQmd plus a `capabilities` arm reporting
+// the embedding model reachable — the happy path every search test that is
+// not itself about qmd's own failure modes builds on.
+const workingQmdWithEmbeddings = `
+case "$1" in
+  --version|-v) echo "qmd 2.8.3-mate.7"; exit 0 ;;
+  status) echo "QMD Status"; exit 0 ;;
+  capabilities) echo '{"schemaVersion":1,"embed":{"available":true}}'; exit 0 ;;
+  query) echo "[]"; exit 0 ;;
+  *) exit 0 ;;
+esac
+`
+
+// qmd is required now: absent, it fails before any Jev request, naming the
+// fix.
+func TestSearchFailsWithoutQmd(t *testing.T) {
 	repo := project(t)
-	code, stdout, stderr := runWith(t, repo, stubQmd(t, workingQmd), "search", "anything", "--for", "decisions/api")
-	if code != exitOK {
-		t.Fatalf("search failed: %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	env := mergeEnv(stubQmd(t, ""), stubJev(t, nil, 0.5))
+
+	code, stdout, stderr := runWith(t, repo, env, "search", "--for", "decisions/api",
+		"--literal", "rate limit", "--semantic", "rate limiting", "--context", "a test")
+	if code == exitOK {
+		t.Fatal("search ran with no qmd on the PATH")
 	}
-	report := decode[searchReport](t, stdout)
-	if report.Semantic != "lexical-only" {
-		t.Errorf("semantic = %q, want lexical-only — workingQmd has no capabilities arm at all", report.Semantic)
+	if stdout != "" {
+		t.Errorf("a failing search wrote to stdout: %s", stdout)
+	}
+	result := decode[finding](t, stderr)
+	if result.Code != "qmd-unavailable" || !strings.Contains(result.Message, "qmd install") {
+		t.Errorf("stderr = %+v, want qmd-unavailable naming `openrecord qmd install`", result)
+	}
+}
+
+// workingQmd — this file's own stub predating the capabilities subcommand —
+// answers `capabilities --json` with exit 0 and no output, which does not
+// parse as JSON. embeddings are required now, so this is a hard failure
+// rather than a silent degrade to the literal pass alone.
+func TestSearchFailsWhenEmbeddingsAreUnavailable(t *testing.T) {
+	repo := project(t)
+	env := mergeEnv(stubQmd(t, workingQmd), stubJev(t, nil, 0.5))
+
+	code, stdout, stderr := runWith(t, repo, env, "search", "--for", "decisions/api",
+		"--literal", "rate limit", "--semantic", "rate limiting", "--context", "a test")
+	if code == exitOK {
+		t.Fatal("search ran with embeddings unavailable")
+	}
+	if stdout != "" {
+		t.Errorf("a failing search wrote to stdout: %s", stdout)
+	}
+	result := decode[finding](t, stderr)
+	if result.Code != "qmd-unavailable" || !strings.Contains(result.Message, "qmd status") {
+		t.Errorf("stderr = %+v, want qmd-unavailable naming `openrecord qmd status`", result)
 	}
 }

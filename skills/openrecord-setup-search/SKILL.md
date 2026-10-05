@@ -11,13 +11,20 @@ wrote two years ago goes unfound.
 
 This registers the stores with `qmd`. It runs **once per project**, not per lookup.
 
-## Before anything: is it wanted?
+## Before anything: `openrecord search` requires this
 
-Semantic search is optional by design. openrecord works without it — searches return what the
-deterministic steps found and say the semantic way was unavailable.
+Semantic search is not optional here: `openrecord search` requires a working qmd with embeddings, and
+fails outright without one — there is no degraded mode. If this project wants to use `search` at all,
+this setup has to happen first.
 
-So do not set this up because you noticed it was missing. It costs real disk (local embedding models)
-and a first indexing pass. Offer it, explain what it buys, and let the user decide.
+It still costs something real — disk for local embedding models, or a provider call per record for a
+hosted one, and a first indexing pass either way. **Which provider** is still the user's call (see
+below); whether to set this up at all usually is not, once `search` is wanted.
+
+`openrecord search` also sends every scoped record's title, description and your `--context` to a
+ranking model (Jev, over OpenRouter) at query time — record bodies are never sent. That is a second,
+separate disclosure from the embedding provider this skill configures, and both are worth saying
+plainly to the user before either runs.
 
 ## The collections mirror the store's isolation
 
@@ -57,9 +64,12 @@ one — and it fails quietly, by returning the wrong project's records rather th
 ## What to index
 
 - **Mask:** `**/*.md` under each store's path.
-- **Include the `INDEX.md` files.** They are not tables of contents here — they carry a `title` and a
-  `description` saying *when to descend into this level*, which is exactly what someone searching for a
-  topic wants to land on. A hit on an index means "descend here"; a hit on a record means "open this".
+- **The mask also catches `INDEX.md` files, and there is no need to carve them out.** `openrecord
+  search` is the only thing these collections feed, and it discards every hit on an index before it
+  reaches you — scope is records only, by design, so a `group` can never appear in `records` or
+  `discarded`. (That is a departure from `grep`, which still returns an index hit meaning *descend
+  here* — but `grep` scans the filesystem directly and never touches qmd or these collections.) Leaving
+  `INDEX.md` files in the mask costs a few extra chunks at embed time and nothing more.
 - **Paths are absolute** when registering, resolved against the repository root, even though everything
   else in openrecord speaks in store-relative coordinates.
 

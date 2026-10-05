@@ -66,3 +66,13 @@ func oneArgument(name string, positional []string, what string) (string, error) 
 			name, what, len(positional), strings.Join(positional, " "))
 	}
 }
+
+// twoArguments takes the two subjects `review open` and `review mark` each
+// need, before their flags.
+func twoArguments(name string, positional []string, what string) (string, string, error) {
+	if len(positional) != 2 {
+		return "", "", Errorf(finding.CodeUsage, "%s needs %s, got %d argument(s): %s",
+			name, what, len(positional), strings.Join(positional, " "))
+	}
+	return positional[0], positional[1], nil
+}

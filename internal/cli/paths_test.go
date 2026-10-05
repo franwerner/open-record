@@ -301,24 +301,26 @@ func TestDocumentedFlagsExist(t *testing.T) {
 	}
 }
 
-// TestPublishedArchitectureIsConsistentAboutQmd guards the claim the whole
-// search reconciliation rests on: docs/cli.md, INTEGRATION.md, both affected
-// skills and the internal/qmd package doc all describe the same relationship
-// with qmd. Pinning the exact reconciled wording would break on every honest
-// rephrasing, so this checks the one thing that actually matters — none of
-// them asserts the superseded, now-false claim that the binary never
-// calls/runs/executes qmd at all (search's meaning half genuinely does, as a
-// subprocess) — and that no internal Go symbol leaked into a user-facing
-// surface.
+// TestPublishedArchitectureIsConsistentAboutQmd guards the claim this change
+// rests on: docs/cli.md, docs/README.md, README.md, the affected skills and
+// the internal/qmd package doc all describe the same relationship with qmd —
+// required for `search`, with a ranking model (Jev) also running at query
+// time. Pinning the exact wording would break on every honest rephrasing, so
+// this checks the specific claims that would now be false: that no model
+// runs at query time, that qmd is optional for search, or that a removed
+// identifier (`--with-qmd`, `INTEGRATION.md`, a stripped qmd marker) survives
+// — plus that no internal Go symbol leaked into a user-facing surface.
 func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
 	sites := map[string]string{}
 	for name, path := range map[string]string{
-		"README.md":                          filepath.Join("..", "..", "README.md"),
-		"docs/cli.md":                        filepath.Join("..", "..", "docs", "cli.md"),
-		"INTEGRATION.md":                     filepath.Join("..", "..", "INTEGRATION.md"),
-		"skills/openrecord-consult/SKILL.md": filepath.Join("..", "..", "skills", "openrecord-consult", "SKILL.md"),
-		"skills/openrecord-mine/SKILL.md":    filepath.Join("..", "..", "skills", "openrecord-mine", "SKILL.md"),
-		"internal/qmd package doc":           filepath.Join("..", "qmd", "qmd.go"),
+		"README.md":                               filepath.Join("..", "..", "README.md"),
+		"docs/cli.md":                             filepath.Join("..", "..", "docs", "cli.md"),
+		"docs/README.md":                          filepath.Join("..", "..", "docs", "README.md"),
+		"skills/openrecord-consult/SKILL.md":      filepath.Join("..", "..", "skills", "openrecord-consult", "SKILL.md"),
+		"skills/openrecord-mine/SKILL.md":         filepath.Join("..", "..", "skills", "openrecord-mine", "SKILL.md"),
+		"skills/openrecord-reconcile/SKILL.md":    filepath.Join("..", "..", "skills", "openrecord-reconcile", "SKILL.md"),
+		"skills/openrecord-setup-search/SKILL.md": filepath.Join("..", "..", "skills", "openrecord-setup-search", "SKILL.md"),
+		"internal/qmd package doc":                filepath.Join("..", "qmd", "qmd.go"),
 	} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -327,30 +329,32 @@ func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
 		sites[name] = string(raw)
 	}
 
-	// The claim this reconciliation superseded: an unqualified denial that the
-	// binary ever calls/runs/executes qmd (or "the semantic/meaning tool")
-	// at all. That was true before this change and is false after it.
-	superseded := regexp.MustCompile(`(?i)never (calls?|runs?|executes?|invokes?) (qmd|the (semantic|meaning) (tool|half|search))\b`)
+	// Superseded: a claim that no model runs at query time. Jev scores every
+	// scoped record against --context on every search, and qmd's own
+	// embedding model runs for the meaning-based pass — both at query time.
+	noModelAtQueryTime := regexp.MustCompile(`(?i)no model (runs?|is run)\b|runs? no model at query time`)
 	for name, text := range sites {
-		if match := superseded.FindString(text); match != "" {
-			t.Errorf("%s states the superseded claim %q — search's meaning half genuinely executes qmd as a subprocess", name, match)
+		if match := noModelAtQueryTime.FindString(text); match != "" {
+			t.Errorf("%s states %q — a ranking model runs at query time on every search now", name, match)
 		}
 	}
 
-	// The same reconciliation, stated the other way round: an unqualified denial
-	// that a model ever runs. One does — the embedding model that IS the meaning
-	// half — so the claim only holds qualified, as "no model to decide" or "no
-	// model at query time". The qualifier is what the reader needs; without it
-	// the sentence is simply false.
-	modelDenial := regexp.MustCompile(`(?i)never (calls?|runs?|invokes?) an? model`)
+	// Superseded: qmd (or semantic search generally) described as optional for
+	// `search`. It is required now, with no degraded mode.
+	qmdOptional := regexp.MustCompile(`(?i)qmd is optional|semantic search is optional`)
 	for name, text := range sites {
-		for _, at := range modelDenial.FindAllStringIndex(text, -1) {
-			tail := text[at[1]:min(at[1]+40, len(text))]
-			if strings.Contains(tail, "to decide") || strings.Contains(tail, "at query time") {
-				continue
+		if match := qmdOptional.FindString(text); match != "" {
+			t.Errorf("%s states %q — qmd is required for search", name, match)
+		}
+	}
+
+	// No removed identifier may survive in a published file.
+	removed := []string{"--with-qmd", "WITH_QMD", "WithQmd", "with_qmd", "qmd:start", "qmd:end", "INTEGRATION.md"}
+	for name, text := range sites {
+		for _, identifier := range removed {
+			if strings.Contains(text, identifier) {
+				t.Errorf("%s names the removed identifier %q", name, identifier)
 			}
-			t.Errorf("%s denies calling a model without the qualifier that makes it true: %q",
-				name, strings.TrimSpace(text[at[0]:at[1]]+tail))
 		}
 	}
 
@@ -358,9 +362,8 @@ func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
 	// is excluded: it is internal by definition and names its own package's
 	// symbols legitimately.
 	symbols := []string{
-		"runSearch", "runSemanticPass", "literalMatches", "collectionsFor",
-		"searchReport", "collectionScope", "ReadCapabilities(", "qmd.Query(",
-		"underCoordinate", "normalizeOmit", "omitFrom(",
+		"runSearch", "scanLiteral(", "scanSemantic(", "searchScope(", "translateSemanticHit(",
+		"collectionsFor(", "searchRecord{", "searchOutput{", "collectionScope{", "normalizeOmit(",
 	}
 	for name, text := range sites {
 		if name == "internal/qmd package doc" {
@@ -377,7 +380,8 @@ func TestPublishedArchitectureIsConsistentAboutQmd(t *testing.T) {
 // TestSearchIsThePublishedLookupCommand guards the spec scenario "A calling
 // agent follows the published instructions": an agent looking for the
 // records that govern a piece of work is told to run `openrecord search`,
-// never `qmd` itself, and never to translate a `qmd://` URL by hand.
+// never `qmd` itself, and never to translate a `qmd://` URL by hand. It
+// passes without reading INTEGRATION.md, which no longer exists.
 //
 // skills/openrecord-setup-search/SKILL.md is deliberately excluded — it
 // legitimately shows direct `qmd query` examples for registering a store,
@@ -387,7 +391,6 @@ func TestSearchIsThePublishedLookupCommand(t *testing.T) {
 	for name, path := range map[string]string{
 		"README.md":                          filepath.Join("..", "..", "README.md"),
 		"docs/cli.md":                        filepath.Join("..", "..", "docs", "cli.md"),
-		"INTEGRATION.md":                     filepath.Join("..", "..", "INTEGRATION.md"),
 		"skills/openrecord-consult/SKILL.md": filepath.Join("..", "..", "skills", "openrecord-consult", "SKILL.md"),
 		"skills/openrecord-mine/SKILL.md":    filepath.Join("..", "..", "skills", "openrecord-mine", "SKILL.md"),
 	} {
@@ -398,12 +401,15 @@ func TestSearchIsThePublishedLookupCommand(t *testing.T) {
 		sites[name] = string(raw)
 	}
 
-	// Presence: each site shows the agent an `openrecord search TERM --for
-	// ...` invocation — the lookup command itself, not a description of it.
-	invocation := regexp.MustCompile(`openrecord search ["“][^"”\n]+["”]\s+--for\s`)
+	// Presence: each site shows the agent an `openrecord search --for ...
+	// --literal ...` invocation — the lookup command itself, not a
+	// description of it. A shell line-continuation backslash is folded first,
+	// since every example here wraps its flags across lines.
+	invocation := regexp.MustCompile(`openrecord search\b[^\n]*--for\s+\S+[^\n]*--literal\s`)
 	for name, text := range sites {
-		if !invocation.MatchString(text) {
-			t.Errorf("%s never shows an `openrecord search TERM --for ...` invocation — an agent reading it is not told to run search", name)
+		joined := strings.ReplaceAll(text, "\\\n", " ")
+		if !invocation.MatchString(joined) {
+			t.Errorf("%s never shows an `openrecord search --for ... --literal ...` invocation — an agent reading it is not told to run search", name)
 		}
 	}
 
@@ -419,9 +425,7 @@ func TestSearchIsThePublishedLookupCommand(t *testing.T) {
 
 	// Absence: never an instruction to translate a `qmd://` URL into a store
 	// coordinate by hand. A line naming `qmd://` alongside a directive verb,
-	// with no negation in the same line, reads as such an instruction —
-	// distinguishing it from a line that states the absence, like
-	// INTEGRATION.md's "never a `qmd://` URL to translate by hand".
+	// with no negation in the same line, reads as such an instruction.
 	directive := regexp.MustCompile(`(?i)\b(strip|translate|convert|parse)\b`)
 	negated := regexp.MustCompile(`(?i)\b(never|no|not|n't|nowhere)\b`)
 	for name, text := range sites {

@@ -10,17 +10,19 @@ judgement is a document a host's agent reads, never something the binary decides
 **JSON on stdout, by default.** The primary consumer is an agent, so the machine-readable form is the
 default and the human view is the flag — not the other way round.
 
-**It calls no model to decide.** `search`'s meaning half does run a model — qmd's embedding model,
-executed as a subprocess — but that model **is** the meaning half, not a judgement about which records
-govern a piece of work. No query-expansion model and no rerank model ever run at query time. A framework
-that decided which records govern a piece of work would need a judgement-making model of its own, and
-would stop being a framework about a format.
+**Two models run at query time, and only at query time.** `search` executes `qmd`'s embedding model as
+a subprocess for its meaning-based pass, and sends every scoped record's title and description, plus
+your `--context`, to Jev (a ranking model, over OpenRouter) to score how well each one fits. Neither
+model decides which records govern a piece of work — the embedding model **is** the meaning-based pass,
+and Jev's score is a ranking input to what gets served, never a verdict. No query-expansion model and no
+rerank model ever run on top of either. A framework that decided which records govern a piece of work
+would need a judgement-making model of its own, and would stop being a framework about a format.
 
 **Semantic search is not openrecord's own — it executes another program for it.** The binary owns the
 deterministic half directly: navigating, literal search, validation. For the meaning half, `search`
 executes `qmd`, a separate project in its own repository, as a subprocess and merges what it returns.
-It is **optional**: without it, `search` returns what the deterministic half found and says the semantic
-way was unavailable. The binary never fails for its absence.
+Both qmd and Jev are **required**: `search` fails outright without a usable qmd with embeddings, and
+without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial result.
 
 ## Commands
 
@@ -32,11 +34,13 @@ way was unavailable. The binary never fails for its absence.
 | `record` | Write and edit records. |
 | `validate` | Check a coordinate is well-formed, recursively. |
 | `grep` | Literal search, scoped to a store. |
-| `search` | Literal search plus meaning, scoped to a store, merged into one list. |
+| `search` | Rank every scoped record against a context with Jev, and store the result for review. |
 | `diagram` | Emit a spec as Mermaid on stdout. |
 | `skills` | Emit the bundled agent skills into a directory you name. |
 | `concerns` | Print the concerns catalogue. |
 | `qmd` | Report on semantic search, and install it. |
+| `jev` | Report on the Jev ranking model `search` calls. |
+| `review` | Open, mark and check a stored search's review. |
 | `version` | Print the build, and the store format it understands. |
 
 **There is no `init`.** The first `component add` creates everything the store needs, so a command
@@ -401,56 +405,69 @@ here*, a record hit is *open this*.
 
 ## `search`
 
-The command that actually finds a record: one deduplicated list, merging `grep`'s literal pass with an
-optional pass by meaning.
+The command that actually finds a record: every record under scope is scored against a context by Jev,
+a ranking model, and a fixed rule decides what gets served. The result is stored, so it can be reviewed
+afterward.
 
 ```
-openrecord search "rate limit" --for decisions/api
-openrecord search "rate limit" --for decisions/api --omit decisions/api/security/rate-limits/at-the-gateway.md
+openrecord search --for decisions/api \
+  --literal "rate limit" \
+  --semantic "rate limiting policy" \
+  --context "adding a per-user rate limit to the signup endpoint"
+
+openrecord search --for decisions/api --for decisions/cli \
+  --literal "rate limit" --semantic "rate limiting" --context "..." \
+  --omit decisions/api/security/rate-limits/at-the-gateway.md
 ```
 
-`--for` is **required** — there is no unscoped search. A bare `decisions` coordinate is rejected too, for
-the same reason `grep` rejects it: a decision governs exactly one component, and `openrecord map --for
-decisions` is what lists the ones declared. `--omit` may be repeated, each occurrence naming one path
-exactly as `matches[].path` reports it; a path containing a comma is kept whole, never split.
+`--for` is **required**, and repeatable — scope is the union of every value given, and there is no
+unscoped search. A bare `decisions` coordinate is rejected too, for the same reason `grep` rejects it: a
+decision governs exactly one component, and `openrecord map --for decisions` is what lists the ones
+declared. `--literal` is **required and repeatable**, 1 to 10 non-blank terms, never split on commas.
+`--semantic` and `--context` are each **required**, one value. `--omit` may be repeated, each occurrence
+naming one scoped path exactly; a path containing a comma is kept whole, never split. No positional
+argument is accepted.
 
-### One entry per path, never a rank
+**`qmd` and `OPENROUTER_API_KEY` are both required.** There is no degraded mode: a missing key, an
+absent or unusable `qmd`, or a failing Jev request each fail the whole command before anything is
+served or stored, naming the fix (`openrecord qmd install`, `OPENROUTER_API_KEY`, or
+`openrecord jev status`).
 
-The literal half behaves exactly like `grep` — one entry per file, the first matching line and a real
-hit count. Where both halves find the same path, the entry kept is the literal one: a real line, real
-text, a real count. No score, no rank, and no field says which half found what — only structural order,
-by path.
+### The serving rule
 
-### `semantic` says which halves ran
+Scope is every record under the union of `--for`, indexes excluded, minus `--omit`. Jev scores each one,
+from its title, description and `--context` — record bodies are never sent. The served set is the union
+of: the top 3 by score, every record scoring above 0.2, every record with a literal hit, and every
+record with a semantic hit. `records` is ordered by score descending, ties by path ascending.
+`discarded` is every other scoped record, in path order — never gone, just not ranked highly and not
+otherwise hit.
 
 ```json
 {
-  "term": "rate limit",
-  "for": "decisions/api",
-  "semantic": "used",
-  "omitted": 0,
-  "matches": []
+  "id": "20261004T153012Z-a1b2c3",
+  "model": "typesafe/jev-1.13-20260917",
+  "records": [
+    {
+      "path": "decisions/api/security/rate-limits/at-the-gateway.md",
+      "literal": { "terms": ["rate limit"], "line": 12, "text": "...", "hits": 6 }
+    },
+    { "path": "decisions/api/security/throttling.md" }
+  ],
+  "discarded": ["decisions/api/data/queries.md"],
+  "omitted": 0
 }
 ```
 
-| Value | Meaning |
-| --- | --- |
-| `used` | Both halves ran. |
-| `lexical-only` | Only the literal half ran — an older `qmd`, or one whose embedding model cannot be reached right now. |
-| `unavailable` | No semantic pass ran at all: `qmd` is absent, the query itself failed, or there is no collection to query. |
+A record carries `literal` and/or `semantic` only when that pass hit it directly; a record served on
+ranking alone carries neither, and no score ever appears in the output. `literal.hits` is a real count
+of matching lines; a `semantic` hit's `line`/`text` come from qmd's own snippet.
 
-Every one of these degrades silently: `search` never emits a warning, never prints `qmd`'s own output,
-and always exits the same way the literal half alone would.
+### Every search is stored
 
-### Two consequences worth stating plainly
-
-A semantic-origin entry — one the meaning half found and the literal half did not — carries `hits: 1`.
-That is a placeholder, not a count: `qmd` reports no per-file total, so it is never comparable with a
-literal entry's real `hits`.
-
-A collection with no embedding index built yet still reports `semantic: used` when the call succeeds:
-the meaning half genuinely ran, it simply had nothing embedded to match against. `search` does not probe
-the index, does not build one, and does not warn — this is a stated property, not a defect.
+Each successful search creates one stored search under `.openrecord/.searches/`, addressable by its
+`id`: the inputs, the model, every served record's full content at search time, the discarded paths, and
+timestamps. It is git-ignored, invisible to `validate`/`map`/`grep`/every search scope, and persists
+until a person deletes it. See `review` below for working through it.
 
 ---
 
@@ -473,7 +490,6 @@ drawing, and silence would read like a bug.
 
 ```
 openrecord skills --emit .claude/skills/
-openrecord skills --emit .claude/skills/ --with-qmd
 openrecord skills --emit .claude/skills/ --dry-run
 ```
 
@@ -509,24 +525,11 @@ which is better than deleting on the strength of something we cannot trust.
 
 `--dry-run` reports the same plan and writes nothing.
 
-### `--with-qmd`
+### One variant
 
-Semantic search is optional, so what gets emitted depends on whether the project wants it.
-
-Without the flag, the skills come out with **no mention of `qmd` anywhere**, and
-`openrecord-setup-search` is not emitted at all. An agent should never read about a tool the project does
-not have — that is how you get it trying to run something that is not installed.
-
-With the flag, the semantic step appears in `openrecord-consult` and `openrecord-setup-search` comes along.
-
-**The command only offers; the person installing decides.** No interactive prompt — that would break
-piping and be useless in CI.
-
-Behind this is one authoring rule for the skills themselves: **the `qmd` passages are purely
-additive.** The base text is written to be true whether or not semantic search exists, so the flag only
-ever adds. If a passage comes out as *"without qmd do X, with qmd do Y"*, the base is claiming too much
-and gets rewritten — which is why the rule that matters here, *no search proves an absence, only the
-indexes enumerate*, is stated once and holds in both worlds.
+`search` requires qmd now, so every bundled skill — `openrecord-setup-search` included — applies to
+every project unconditionally. There is no flag to choose a smaller variant, and nothing is stripped: an
+emitted skill is byte-identical to its embedded source.
 
 **It emits; it does not place.** The binary does not know what Claude Code is, or Cursor, or Codex. It
 knows what the content is and writes it where it is told. Whoever installs does the placing — and an
@@ -634,24 +637,46 @@ commands keeping their shape. The pin is also what `status` compares against —
 claim about which qmd this openrecord was built for, and there is no such claim left to make if the
 answer is always whichever one is newest.
 
-### Installing it later means reconciling
+---
 
-Skills already emitted describe a smaller tool than the one now present. Nothing else would notice:
-the files are intact and match exactly what was written.
+## `jev`
 
-The emit manifest records which variant was written, so the mismatch is reported:
+Jev is the model `search` runs at query time to rank every scoped record against the task. This
+subcommand only reports on it — `search` is what actually calls it.
 
-| | |
-| --- | --- |
-| `--with-qmd`, qmd absent | *not on the PATH; searches will report the semantic way as unavailable* |
-| no flag, qmd present | *installed but these skills were emitted without it; re-run with `--with-qmd`* |
-| no flag, previously emitted with it | *these skills previously included the passages and no longer do* |
+```
+openrecord jev status
+```
 
-**Re-emitting is what reconciles.** `--with-qmd` turns the stripped passages back into `updated` files
-and brings `openrecord-setup-search` along; dropping the flag removes it again.
+**`status`** reports whether `OPENROUTER_API_KEY` is set (never its value), whether the endpoint
+answered a minimal request, and the pinned model. Without a key it sends no request at all — there is
+no request a missing key could plausibly send. It exits non-zero unless the key is present and the
+endpoint is reachable.
 
-**The report never changes what is emitted.** Deciding by what happens to be installed would make the
-same command produce different files on different machines, which is worse than the problem it solves.
+---
+
+## `review`
+
+A `search` stores what it served and discarded. `review` is how that stored search gets worked through:
+opening a record, giving it a verdict, and checking whether every served record has one yet.
+
+```
+openrecord review open ID PATH
+openrecord review mark ID PATH --verdict governs|contradicts|unrelated
+openrecord review status ID
+```
+
+**`open`** prints one record from the stored search and marks it opened. A served record prints the
+snapshot taken at search time; a discarded record prints the current file instead and stays discarded —
+opening it never promotes it into the served list.
+
+**`mark`** stores a verdict for a record that was opened earlier. Marking a record that was never opened
+fails rather than silently opening it first, so a reviewer cannot record a verdict for something they
+never actually read. The mark that gives the last served record a verdict is what completes the search;
+marking a discarded record never does.
+
+**`status`** is read-only: it reports which served (and reviewed-discarded) records have a verdict, and
+whether the search is complete. It exits non-zero while any served record still lacks one.
 
 ---
 

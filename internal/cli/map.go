@@ -14,8 +14,10 @@ type mapReport struct {
 	Notes   []finding.Finding `json:"notes,omitempty"`
 }
 
-// coordinateFlag is the one flag map, validate, grep and search share. One
-// definition, so the four cannot describe the same thing differently.
+// coordinateFlag is the one flag map, validate and grep share. One
+// definition, so the three cannot describe the same thing differently.
+// search registers its own repeatable --for instead: it scopes to the union
+// of several coordinates, so a single string flag cannot say what it needs.
 func coordinateFlag(flags *flag.FlagSet) *string {
 	return flags.String("for", "", "coordinate inside the store, like decisions/api/security")
 }

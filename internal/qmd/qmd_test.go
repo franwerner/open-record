@@ -182,26 +182,26 @@ func TestQueryDegradesRatherThanFails(t *testing.T) {
 
 	t.Run("absent binary", func(t *testing.T) {
 		stubQmd(t, "")
-		hits, err := Query("term", []string{"proj-decisions-api"}, false)
+		hits, err := Query("term", []string{"proj-decisions-api"})
 		assertNoPartialResult(t, hits, err, "an absent qmd")
 	})
 
 	t.Run("non-zero exit", func(t *testing.T) {
 		stubQmd(t, `case "$1" in query) exit 1 ;; *) exit 0 ;; esac`)
-		hits, err := Query("term", []string{"proj-decisions-api"}, false)
+		hits, err := Query("term", []string{"proj-decisions-api"})
 		assertNoPartialResult(t, hits, err, "a failing query")
 	})
 
 	t.Run("unparseable output", func(t *testing.T) {
 		stubQmd(t, `case "$1" in query) echo "not an array"; exit 0 ;; *) exit 0 ;; esac`)
-		hits, err := Query("term", []string{"proj-decisions-api"}, false)
+		hits, err := Query("term", []string{"proj-decisions-api"})
 		assertNoPartialResult(t, hits, err, "unparseable output")
 	})
 
 	t.Run("times out", func(t *testing.T) {
 		stubQmdWithSystemTools(t, `case "$1" in query) sleep 21; echo "[]"; exit 0 ;; *) exit 0 ;; esac`)
 		start := time.Now()
-		hits, err := Query("term", []string{"proj-decisions-api"}, false)
+		hits, err := Query("term", []string{"proj-decisions-api"})
 		if elapsed := time.Since(start); elapsed > 25*time.Second {
 			t.Errorf("Query did not respect its own time bound: took %s", elapsed)
 		}
@@ -213,8 +213,31 @@ func TestQueryDegradesRatherThanFails(t *testing.T) {
 // looked up — there is no answer a subprocess could give that would be worth
 // waiting for.
 func TestQueryRefusesToRunWithNoCollection(t *testing.T) {
-	if _, err := Query("term", nil, false); err == nil {
+	if _, err := Query("term", nil); err == nil {
 		t.Error("a query naming no collection did not fail")
+	}
+}
+
+// Query sends only the semantic half now — qmd is required, and there is no
+// keyword-only document left to choose. A newline embedded in the caller's
+// text must not start what qmd would read as a second line.
+func TestQueryCollapsesNewlinesInTheDocument(t *testing.T) {
+	captureFile := filepath.Join(t.TempDir(), "captured.txt")
+	t.Setenv("OPENRECORD_TEST_CAPTURE", captureFile)
+	stubQmd(t, `case "$1" in
+query) echo "$2" > "$OPENRECORD_TEST_CAPTURE"; echo "[]"; exit 0 ;;
+*) exit 0 ;;
+esac`)
+	if _, err := Query("line one\nline two", []string{"proj-decisions-api"}); err != nil {
+		t.Fatalf("Query: %v", err)
+	}
+	raw, err := os.ReadFile(captureFile)
+	if err != nil {
+		t.Fatalf("reading what the stub captured: %v", err)
+	}
+	captured := strings.TrimSpace(string(raw))
+	if strings.Contains(captured, "\n") {
+		t.Errorf("the document sent to qmd still carries a newline: %q", captured)
 	}
 }
 

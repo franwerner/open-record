@@ -15,9 +15,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -195,19 +198,27 @@ type (
 		For     string      `json:"for"`
 		Matches []grepMatch `json:"matches"`
 	}
-	searchMatch struct {
-		Path string `json:"path"`
-		Kind string `json:"kind"`
+	searchLiteral struct {
+		Terms []string `json:"terms"`
+		Line  int      `json:"line"`
+		Text  string   `json:"text"`
+		Hits  int      `json:"hits"`
+	}
+	searchSemantic struct {
 		Line int    `json:"line"`
 		Text string `json:"text"`
-		Hits int    `json:"hits"`
 	}
-	searchReport struct {
-		Term     string        `json:"term"`
-		For      string        `json:"for"`
-		Semantic string        `json:"semantic"`
-		Omitted  int           `json:"omitted"`
-		Matches  []searchMatch `json:"matches"`
+	searchRecord struct {
+		Path     string          `json:"path"`
+		Literal  *searchLiteral  `json:"literal,omitempty"`
+		Semantic *searchSemantic `json:"semantic,omitempty"`
+	}
+	searchOutput struct {
+		ID        string         `json:"id"`
+		Model     string         `json:"model"`
+		Records   []searchRecord `json:"records"`
+		Discarded []string       `json:"discarded"`
+		Omitted   int            `json:"omitted"`
 	}
 	ownersReport struct {
 		Path     string   `json:"path"`
@@ -233,4 +244,49 @@ func findingCodes(findings []finding) []string {
 		codes = append(codes, item.Code)
 	}
 	return codes
+}
+
+// jevInstructionTitle recovers the title (or, for a record with no title, its
+// path) Jev was asked about from the instruction text runSearch sends — the
+// quoted name right after `Record `.
+var jevInstructionTitle = regexp.MustCompile(`Record "([^"]*)":`)
+
+// stubJev starts a local Jev double scoring every question by the title its
+// instruction names — looked up in scores, or fallback when absent — and
+// returns the environment entries that point `search` at it with a key set.
+// Combine with stubQmd's own environment via mergeEnv.
+func stubJev(t *testing.T, scores map[string]float64, fallback float64) []string {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Questions map[string]struct {
+				Instructions string `json:"instructions"`
+			} `json:"questions"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		answers := make(map[string]map[string]float64, len(body.Questions))
+		for name, question := range body.Questions {
+			score := fallback
+			if match := jevInstructionTitle.FindStringSubmatch(question.Instructions); match != nil {
+				if s, ok := scores[match[1]]; ok {
+					score = s
+				}
+			}
+			answers[name] = map[string]float64{"noul": score}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"answers": answers})
+	}))
+	t.Cleanup(server.Close)
+	return []string{"OPENROUTER_API_KEY=a-key", "OPENRECORD_JEV_ENDPOINT=" + server.URL}
+}
+
+// mergeEnv concatenates several environments built by stubQmd/stubJev into
+// the one slice runWith takes.
+func mergeEnv(envs ...[]string) []string {
+	var out []string
+	for _, env := range envs {
+		out = append(out, env...)
+	}
+	return out
 }

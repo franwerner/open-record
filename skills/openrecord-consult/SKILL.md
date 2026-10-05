@@ -79,32 +79,56 @@ another.
 **3. Search.**
 
 ```
-openrecord search "rate limit" --for decisions/api
-→ decisions/api/security/rate-limits/at-the-gateway.md   [record]  line 12, 6 hits
-  decisions/api/security/INDEX.md                        [group]   line 3,  1 hit
+openrecord search --for decisions/api --literal "rate limit" \
+  --semantic "rate limiting policy for a new endpoint" \
+  --context "adding a per-user rate limit to the signup endpoint"
+→ { "id": "20261004T153012Z-a1b2c3", "model": "typesafe/jev-1.13-20260917",
+    "records": [
+      { "path": "decisions/api/security/rate-limits/at-the-gateway.md",
+        "literal": { "terms": ["rate limit"], "line": 12, "text": "...", "hits": 6 } },
+      { "path": "decisions/api/security/throttling.md" } ],
+    "discarded": [ "decisions/api/data/queries.md" ], "omitted": 0 }
 ```
 
-One entry per file, never per line, with `hits` saying how many lines matched — which is the difference
-between *mentioned once in passing* and *this is what the record is about*.
+Every call requires qmd (registered semantic search) and `OPENROUTER_API_KEY` — there is no degraded
+mode. `--literal` is exact wording you remember; `--semantic` is a paraphrase of what you are looking
+for; `--context` is the work you are about to do. Behind the scenes, a small ranking model (Jev, over
+OpenRouter) scores every record in scope against `--context`, from its title and description only —
+record bodies are never sent anywhere. `records` is what was served: the top-ranked ones, plus anything
+either search mode hit directly, highest-ranked first. `discarded` is everything else in scope, so
+nothing silently vanishes.
 
-**A hit is a file, not a level.** Open a `record`; descend into a `group`'s **parent**. Feeding a hit
-path straight to `map` is the obvious next move and it is wrong — `map --for decisions/api/security` is
-the level, `decisions/api/security/rate-limits/at-the-gateway.md` is the file. The tool says so if you
-try it, rather than reporting that a path nobody wrote does not exist.
+A served record carries `literal` and/or `semantic` when one of those modes hit it directly; a record
+served on ranking alone carries neither. A `literal` hit is one entry per file, never per line — `hits`
+says how many lines matched, which is the difference between *mentioned once in passing* and *this is
+what the record is about*.
 
-`search` always runs a literal pass — it hits exactly when you remember the wording, and misses
-entirely when the record says the same thing in other words.
+**Every hit `search` returns is a file, never a level.** `records` and `discarded` only ever name
+records — a `group` cannot appear in either, because `search` drops index hits before they reach you.
+Descending by level is `map`'s job (step 2, above); every path `search` gives you is one to open.
 
-<!-- qmd:start -->
-When qmd is registered, the same command also runs a pass by meaning over the same scope — no second
-command, no URL to translate. The envelope's `semantic` field says which halves actually ran: `used`
-means both did, `lexical-only` means only the wording match did (an older qmd, or one whose embedding
-model cannot be reached right now), `unavailable` means neither did. Check `openrecord qmd status` if
-you want to know why.
+**Every search is stored, and reviewing it is not optional.** The `id` in the response names it, and
+before you move on to step 4 you work through every record it served:
 
-If `semantic` is anything other than `used`, say so and continue with what `search` found — it is a
-missing capability, not a failure.
-<!-- qmd:end -->
+```
+openrecord review open 20261004T153012Z-a1b2c3 decisions/api/security/rate-limits/at-the-gateway.md
+```
+
+Open **every** record in `records`, in the order served, and read each one. Then mark each with your
+judgment:
+
+```
+openrecord review mark 20261004T153012Z-a1b2c3 \
+  decisions/api/security/rate-limits/at-the-gateway.md --verdict governs
+```
+
+`--verdict` is `governs`, `contradicts`, or `unrelated`. Marking a record that was never opened fails —
+there is no shortcut past actually reading it. A `discarded` record is not required, but open and mark
+one anyway when something about it looks worth a second look.
+
+**Do not proceed with the work until `openrecord review status ID` exits 0.** While any served record
+still lacks a verdict, this is unfinished, not optional — the review is what turns a list of hits into a
+judgment that survives past this conversation, and skipping it leaves every one of them unread.
 
 **No search proves an absence.** Whatever you searched with, coming back empty tells you that you did
 not find something, never that there is nothing to find. Coverage — *has everything been accounted
@@ -142,10 +166,7 @@ They find different things, which is why none of them travels alone:
 | --- | --- | --- |
 | `component owners` | Which surface the file is in, and every capability that names it. | Nothing about *which* of them applies. |
 | The descent | Everything filed under the concerns you entered. The only one that *enumerates*. | What sits in a concern you did not think to enter. |
-| `search` | Exact wording, plus meaning when semantic search is set up for this project. | The record that says the same thing in other words, when it is not set up. |
-<!-- qmd:start -->
-| `search`, meaning half | Meaning, across the whole component at once. | Nothing systematically — but it ranks, so it can leave something out. |
-<!-- qmd:end -->
+| `search` | Exact wording (`--literal`), meaning (`--semantic`), and a ranking of everything in scope against `--context`. | Nothing in scope — ranking can leave a low-scoring record out of `records`, but it is always in `discarded`, never gone. |
 
 **Then comes the part no command can do: deciding which of them actually governs your work.** A record
 can surface in every one of them and still not apply. Making that call needs the work in view — which
@@ -166,19 +187,23 @@ Governs this work:
 
 - specs/rule/usage-limits.md                                  [accepted]
   Constrains you: 60 req/min, 429 with Retry-After.
-  Surfaced by: search "rate limit"
+  Surfaced by: search --literal "rate limit" (20261004T153012Z-a1b2c3)
+  Reviewed: governs
   Still true of the code: yes — src/gateway/limiter.go:41.
 
 Looked at, does not apply:
 - decisions/api/data — queries and the storage model; nothing there touches request limits.
 ```
 
-Four things make this worth writing rather than holding in your head:
+Five things make this worth writing rather than holding in your head:
 
 - **"Constrains you"** says what you may not do. It is not a summary of the record — a summary makes a
   reader work out the consequence themselves, and they will not.
 - **"Surfaced by"** says how it was found, which is how much weight it carries. A record found by
   descending into the concern that owns your work is stronger evidence than one a search ranked highly.
+- **"Reviewed"** is the verdict `review mark` recorded for anything surfaced by `search` — `governs`,
+  `contradicts`, or `unrelated`. It is not your own restatement; it is what the review step above
+  produced, and a record with no `Reviewed` line here is one the walk has not finished with yet.
 - **"Looked at, does not apply"** is the only thing separating *does not apply* from *nobody looked*.
   Leave it out and a reader cannot tell which happened, so they have to redo the walk.
 - **"Still true of the code"** is the one line nobody else is positioned to write. It gets recorded

@@ -20,7 +20,6 @@ func TestHelpNamesTheFlagsACallerNeeds(t *testing.T) {
 		{[]string{"record", "write", "--help"}, "--components"},
 		{[]string{"record", "write", "--help"}, "--body-file"},
 		{[]string{"skills", "--help"}, "--dry-run"},
-		{[]string{"skills", "--help"}, "--with-qmd"},
 		{[]string{"qmd", "install", "--help"}, "--force"},
 		{[]string{"level", "add", "--help"}, "--description"},
 	} {

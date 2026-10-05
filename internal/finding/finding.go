@@ -45,6 +45,11 @@ const (
 	CodeMalformedScenario    = "malformed-scenario"
 	CodeBodyHashMissing      = "body-hash-missing"
 	CodeBodyHashMismatch     = "body-hash-mismatch"
+	CodeJevUnavailable       = "jev-unavailable"
+	CodeQmdUnavailable       = "qmd-unavailable"
+	CodeSearchNotFound       = "search-not-found"
+	CodeRecordNotInSearch    = "record-not-in-search"
+	CodeRecordNotOpened      = "record-not-opened"
 )
 
 // Finding is one thing wrong with one file.

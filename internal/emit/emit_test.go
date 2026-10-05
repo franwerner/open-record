@@ -151,6 +151,30 @@ func TestPlanTouchesNothing(t *testing.T) {
 	}
 }
 
+// A manifest written by a build that still had the `with_qmd` field must
+// decode cleanly — encoding/json ignores an unknown field — and still decide
+// removed and kept files exactly as before: that decision only ever reads
+// Entries, never the retired field.
+func TestAManifestWithTheRetiredWithQmdFieldStillDecidesCorrectly(t *testing.T) {
+	dir := t.TempDir()
+	old := `{"version":1,"emitter":"test","with_qmd":true,"entries":[{"path":"dropped/SKILL.md","hash":"` +
+		hash([]byte("two")) + `"}]}`
+	if err := os.WriteFile(filepath.Join(dir, ManifestName), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "dropped"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "dropped", "SKILL.md"), []byte("two"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	changes := emitInto(t, dir, []File{file("kept/SKILL.md", "one")})
+	if got := actions(changes)["dropped/SKILL.md"]; got != Removed {
+		t.Fatalf("a skill no longer shipped, tracked by an old with_qmd manifest, = %q, want %q (%+v)", got, Removed, changes)
+	}
+}
+
 func TestAnUnreadableManifestIsTreatedAsAbsent(t *testing.T) {
 	dir := t.TempDir()
 	emitInto(t, dir, []File{file("a/SKILL.md", "one")})

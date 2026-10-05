@@ -160,16 +160,28 @@ different and more interesting finding — say that instead.
 other words passes the check and the duplicate gets written — which is precisely the failure the check
 exists to prevent. So read the level's listing with `map` as well: the descriptions are one line each
 and they state the decision, so a duplicate is visible there even when its wording differs.
-<!-- qmd:start -->
-Better, ask by meaning rather than by wording:
+
+Better, ask `search` by meaning rather than by wording:
 
 ```
-openrecord search "how request limits are applied" --for decisions/api
+openrecord search --for decisions/api --literal "request limit" \
+  --semantic "how request limits are applied" \
+  --context "<the candidate's own title, description and body, pasted in full>"
 ```
 
-This is the one step where semantic search is doing work nothing else can: it is looking for a record
-whose words you do not know, which is the definition of a duplicate you are about to create.
-<!-- qmd:end -->
+This is the one step where the meaning half of `search` is doing work nothing else can: it is looking
+for a record whose words you do not know, which is the definition of a duplicate you are about to
+create. **`--context` is the candidate itself** — its title, description and body, not a sentence
+describing the mining task — because Jev scores every existing record against exactly that text, and the
+candidate's own words are what a near-duplicate would actually resemble.
+
+Then work through what it served, before deciding the candidate is new: `openrecord review open <id>
+<path>` each record, read it against the candidate, and `openrecord review mark <id> <path> --verdict
+governs|contradicts|unrelated` — `governs` means the store already covers this candidate, `contradicts`
+means the candidate disagrees with something accepted, `unrelated` means it turned out not to be about
+the same thing. `openrecord review status <id>` should exit 0 before you present the candidate as new.
+Skipping this is how a true duplicate — the exact thing this search was run to catch — gets presented as
+if nothing had been checked.
 
 ## Do not try to mine everything
 

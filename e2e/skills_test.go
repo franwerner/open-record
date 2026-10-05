@@ -13,7 +13,6 @@ import (
 
 type skillsReport struct {
 	Into    string `json:"into"`
-	WithQmd bool   `json:"with_qmd"`
 	DryRun  bool   `json:"dry_run"`
 	Changes []struct {
 		Path   string `json:"path"`
@@ -55,11 +54,11 @@ func TestDryRunReportsThePlanAndTouchesNothing(t *testing.T) {
 	repo := project(t)
 	into := filepath.Join(repo, ".claude", "skills")
 
-	mustRun(t, repo, "skills", "--emit", into, "--with-qmd")
+	mustRun(t, repo, "skills", "--emit", into)
 	before := fingerprint(t, into)
 
 	// Asking the same question a second time must be free of consequence.
-	stdout := mustRun(t, repo, "skills", "--emit", into, "--with-qmd", "--dry-run")
+	stdout := mustRun(t, repo, "skills", "--emit", into, "--dry-run")
 	report := decode[skillsReport](t, stdout)
 	if !report.DryRun {
 		t.Errorf("the report does not say it was a dry run: %s", stdout)
@@ -68,76 +67,69 @@ func TestDryRunReportsThePlanAndTouchesNothing(t *testing.T) {
 		t.Error("a dry run changed the directory")
 	}
 
-	// And the plan it reports is the one a real run would carry out: asked
-	// without the qmd variant, it must report the same removal a real run does.
-	plan := decode[skillsReport](t, mustRun(t, repo, "skills", "--emit", into, "--dry-run"))
-	if fingerprint(t, into) != before {
-		t.Fatal("the second dry run changed the directory")
-	}
-	if plan.Counts["removed"] == 0 {
-		t.Errorf("dropping the qmd variant plans no removal: %s", stdout)
-	}
-
 	applied := decode[skillsReport](t, mustRun(t, repo, "skills", "--emit", into))
-	if applied.Counts["removed"] != plan.Counts["removed"] || applied.Counts["updated"] != plan.Counts["updated"] {
-		t.Errorf("the plan and the run disagree:\nplanned %v\napplied %v", plan.Counts, applied.Counts)
+	if applied.Counts["unchanged"] != len(applied.Changes) {
+		t.Errorf("a second real run reported work beyond unchanged: %+v", applied.Counts)
 	}
 }
 
-// qmdMismatch has four branches and had no test. It is the only thing that tells
-// a project its skills describe a smaller tool than the one now installed.
-func TestEmitReportsAQmdMismatch(t *testing.T) {
+// A fresh emit is every bundled skill, setup-search included, with no
+// qmd:start/qmd:end marker left in the output.
+func TestSkillsEmitEveryBundledSkillWithNoMarkers(t *testing.T) {
+	repo := project(t)
+	into := filepath.Join(t.TempDir(), "skills")
+	mustRun(t, repo, "skills", "--emit", into)
+
+	entries, err := os.ReadDir(into)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := map[string]bool{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		found[entry.Name()] = true
+		raw, err := os.ReadFile(filepath.Join(into, entry.Name(), "SKILL.md"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(raw), "qmd:start") || strings.Contains(string(raw), "qmd:end") {
+			t.Errorf("%s still carries a qmd marker", entry.Name())
+		}
+	}
+	if !found["openrecord-setup-search"] {
+		t.Error("openrecord-setup-search was not emitted — there is only one variant now")
+	}
+}
+
+// --with-qmd no longer exists: passing it is an ordinary unknown-flag usage
+// failure.
+func TestSkillsWithQmdIsAUsageFailure(t *testing.T) {
 	repo := project(t)
 	into := filepath.Join(repo, ".claude", "skills")
-
-	t.Run("asked for qmd, none installed", func(t *testing.T) {
-		_, stdout, _ := runWith(t, repo, stubQmd(t, ""), "skills", "--emit", into, "--with-qmd", "--dry-run")
-		report := decode[skillsReport](t, stdout)
-		if !strings.Contains(report.Note, "not on the PATH") {
-			t.Errorf("note = %q, want it to say qmd is absent", report.Note)
-		}
-	})
-
-	t.Run("qmd installed, emitted without it", func(t *testing.T) {
-		_, stdout, _ := runWith(t, repo, stubQmd(t, workingQmd), "skills", "--emit", into, "--dry-run")
-		report := decode[skillsReport](t, stdout)
-		if !strings.Contains(report.Note, "--with-qmd") {
-			t.Errorf("note = %q, want it to point at --with-qmd", report.Note)
-		}
-	})
-
-	t.Run("neither installed nor asked for", func(t *testing.T) {
-		_, stdout, _ := runWith(t, repo, stubQmd(t, ""), "skills", "--emit", into, "--dry-run")
-		report := decode[skillsReport](t, stdout)
-		if report.Note != "" {
-			t.Errorf("note = %q, want silence: nothing is out of step", report.Note)
-		}
-	})
-
-	t.Run("previously emitted with qmd and no longer", func(t *testing.T) {
-		fresh := filepath.Join(t.TempDir(), "skills")
-		runWith(t, repo, stubQmd(t, workingQmd), "skills", "--emit", fresh, "--with-qmd")
-		_, stdout, _ := runWith(t, repo, stubQmd(t, ""), "skills", "--emit", fresh, "--dry-run")
-		report := decode[skillsReport](t, stdout)
-		if !strings.Contains(report.Note, "no longer") {
-			t.Errorf("note = %q, want it to say the passages were dropped", report.Note)
-		}
-	})
+	code, _, stderr := run(t, repo, "skills", "--emit", into, "--with-qmd")
+	if code == exitOK {
+		t.Fatal("--with-qmd was accepted")
+	}
+	result := decode[finding](t, stderr)
+	if result.Code != "usage" {
+		t.Errorf("code = %q, want usage", result.Code)
+	}
 }
 
-// What gets emitted must depend on the flag and on nothing else. Deciding from
-// what happens to be installed would make the same command produce different
-// files on different machines, which is worse than the problem it would solve.
+// What gets emitted does not depend on what happens to be installed: there is
+// one variant now, regardless of whether qmd is on the PATH.
 func TestWhatIsEmittedDoesNotDependOnWhatIsInstalled(t *testing.T) {
 	repo := project(t)
 
-	withQmdPresent := filepath.Join(t.TempDir(), "a")
-	runWith(t, repo, stubQmd(t, workingQmd), "skills", "--emit", withQmdPresent, "--with-qmd")
+	qmdPresent := filepath.Join(t.TempDir(), "a")
+	runWith(t, repo, stubQmd(t, workingQmdWithEmbeddings), "skills", "--emit", qmdPresent)
 
-	withQmdAbsent := filepath.Join(t.TempDir(), "b")
-	runWith(t, repo, stubQmd(t, ""), "skills", "--emit", withQmdAbsent, "--with-qmd")
+	qmdAbsent := filepath.Join(t.TempDir(), "b")
+	runWith(t, repo, stubQmd(t, ""), "skills", "--emit", qmdAbsent)
 
-	if strip(fingerprint(t, withQmdPresent)) != strip(fingerprint(t, withQmdAbsent)) {
+	if strip(fingerprint(t, qmdPresent)) != strip(fingerprint(t, qmdAbsent)) {
 		t.Error("the same command emitted different files depending on whether qmd was installed")
 	}
 }

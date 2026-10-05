@@ -3,10 +3,12 @@
 A project's durable records: **what was chosen and why**, and **what the system does**. A directory
 layout, two kinds of document, and a CLI that reads and writes them.
 
-It is not an agent framework and it calls no model to decide — the one model it reaches for is the
-embedding model behind `search`'s meaning half, which is the search itself and not a verdict about
-what governs your work. Everything else is deterministic; everything that needs judgement is prose a
-person or an agent writes.
+It is not an agent framework. `search` is the one place a model runs: it sends every scoped record's
+title and description, plus the context you give it, to a small ranking model (Jev, over OpenRouter)
+that scores how well each one fits — never the record's body, and never a verdict about what governs
+your work, only a ranking. `search` also requires [qmd](https://github.com/franwerner/qmd) for its
+own meaning-based pass; there is no mode that runs without either. Everything else is deterministic;
+everything that needs judgement is prose a person or an agent writes.
 
 ## Install
 
@@ -16,10 +18,10 @@ curl -fsSL https://raw.githubusercontent.com/franwerner/open-record/master/scrip
 
 Installs to `~/.local/bin`. Set `INSTALL_DIR` to change that, or `VERSION=v0.1.0` to pin a release.
 
-It asks once whether to install [qmd](https://github.com/franwerner/qmd) as well, for semantic search.
-Answering no costs nothing — searches fall back to the deterministic steps and say so — and you can add
-it later with `openrecord qmd install`. Set `WITH_QMD=yes` or `WITH_QMD=no` to answer in advance; an
-install that is not attached to a terminal never asks and never blocks.
+It also installs [qmd](https://github.com/franwerner/qmd), since `search` requires it — there is no
+prompt and no way to skip it. If npm is not on the PATH, that step is skipped with a warning and you
+can run it later with `openrecord qmd install`. `search` also needs `OPENROUTER_API_KEY` set, for the
+ranking model it calls at query time.
 
 With a Go toolchain:
 
@@ -42,8 +44,10 @@ openrecord component owners src/api/handlers/user.go   # → api
 openrecord map --for decisions/api                     # → its concerns, with descriptions
 openrecord map --for decisions/api/security            # → subgroups and records
 
-# Search: the literal pass, plus the meaning pass when qmd can answer.
-openrecord search "rate limit" --for decisions/api
+# Search: exact wording, meaning, and a ranking of everything in scope
+# against the work you are about to do. Stored, so it can be reviewed later.
+openrecord search --for decisions/api --literal "rate limit" \
+  --semantic "rate limiting policy" --context "adding a per-user rate limit"
 
 # Write. Nothing invalid ever lands: the checks run on the way in.
 openrecord level add decisions/api/security
@@ -86,8 +90,9 @@ there is nothing to fall out of sync.
 Three commands, in order, and only the middle one enumerates. `component owners` turns a path in your
 code into the surface that governs it. `map` walks down from there a level at a time, and you steer it
 by reading each level's description — descend into every one that matches the work, not the one that
-matches best. `search` then runs the literal pass and, when the semantic tool can answer, the
-meaning-based one too, in a single call; tell it what the descent already found and it leaves those out.
+matches best. `search` then scores every record still in scope — by exact wording (`--literal`), by
+meaning (`--semantic`), and by a ranking model's judgement of your `--context` — in one call; tell it
+what the descent already found with `--omit` and it leaves those out.
 
 ```mermaid
 flowchart TD
@@ -95,16 +100,12 @@ flowchart TD
     O --> M["map --for: the groups and records at that level, each with its own description"]
     M --> D{"Does a level's description match the work?"}
     D --> |"Yes — descend, into every level that matches"| M
-    D --> |"Every branch reached records"| S["search TERM --for, told which paths the descent already found"]
-    S --> C{"Does qmd report an embedding model?"}
-    C --> |"Yes"| B["Both passes run — semantic: used"]
-    C --> |"No"| L["The literal pass alone — semantic: lexical-only"]
-    C --> |"qmd absent, or the query failed"| U["No semantic pass ran — semantic: unavailable"]
-    B --> R["One entry per path, the literal one winning a tie, minus the paths you omitted"]
-    L --> R
-    U --> R
-    R --> J["Open the candidates and read them: surfacing is not governing, and nothing here ranks"]
-    J --> K["A contradiction with an accepted record stops that line of work"]
+    D --> |"Every branch reached records"| S["search --for --literal --semantic --context, told which paths the descent already found"]
+    S --> J1["Jev scores every scoped record's title and description against --context"]
+    J1 --> R["Served: the top-ranked records, plus any direct --literal or --semantic hit, highest first. Everything else: discarded, not gone"]
+    R --> ST["The search is stored; review open/mark/status track your verdict on each served record"]
+    ST --> OP["Open the candidates and read them: surfacing is not governing"]
+    OP --> K["A contradiction with an accepted record stops that line of work"]
 ```
 
 No search proves an absence. Coverage comes from reading the descriptions on the way down, never from
@@ -149,7 +150,6 @@ stateDiagram-v2
 
 [docs/decision-record.md](docs/decision-record.md) explains both in full.
 
-## Documentation
 ## Checking that a record is still true
 
 `validate` checks that a record is well formed. It never checks that it is still *true* — that is
@@ -209,6 +209,7 @@ already opened the records that govern the file you are about to change, it says
 still true of that file, with the line that shows it. That costs one more look at something already
 open, and it is the only moment the check is free.
 
+## Documentation
 
 | | |
 | --- | --- |
@@ -218,23 +219,22 @@ open, and it is the only moment the check is free.
 | [docs/cli.md](docs/cli.md) | Every command. |
 | [docs/concerns.md](docs/concerns.md) | The catalogue: eleven concerns and their topics. |
 
-## Semantic search
+## Semantic search and Jev
 
-Optional, and a separate project: [qmd](https://github.com/franwerner/qmd) indexes the store so records
-can be found by meaning rather than exact wording. `search` runs it as a subprocess when it can; with no
-qmd, or no embedding model behind it, it returns what the literal pass found and its `semantic` field
-says which half actually ran. openrecord never fails for its absence.
+`search` requires two things beyond the binary itself, and fails outright without either — there is no
+degraded mode: a separate project, [qmd](https://github.com/franwerner/qmd), indexed with a working
+embedding model, for the meaning-based pass; and `OPENROUTER_API_KEY`, for the Jev model that ranks
+every scoped record's title and description against the `--context` you give it. A record's body is
+never sent anywhere.
 
 ```bash
-openrecord qmd status     # installed? which collections does this project need?
-openrecord qmd install    # add it later
+openrecord qmd status     # installed, usable, and which collections this project needs
+openrecord qmd install    # install or reinstall it
+openrecord jev status     # is the key set, and does the endpoint answer
 ```
 
-`openrecord skills --emit <dir> --with-qmd` includes the passages that use it. Without the flag, no
-emitted skill mentions it at all — an agent must never read about a tool the project does not have.
-
-Installing it later leaves already-emitted skills describing a smaller tool, and nothing else would
-notice, so `skills --emit` reports the mismatch. Re-emitting is what reconciles it.
+`openrecord skills --emit <dir>` emits one variant: every bundled skill describes `search` as it
+actually behaves, with no flag to choose between describing a smaller tool and the real one.
 
 ## Building
 

@@ -82,27 +82,63 @@ get a 429" and "the gateway keys its bucket by client, not by endpoint" can dire
 share not one word. Neither the sibling read nor a search over key terms finds this pair — only the
 declared link does, which is exactly why skipping it is the most common way this check goes wrong.
 
-**3. Semantic and literal neighbours.**
+**3. Semantic and literal neighbours, across the whole store.**
 
 ```
-openrecord search "rate limit per client" --for decisions/api
+openrecord map --for decisions
+→ api
+  cli
+  web
+
+openrecord search --for decisions/api --for decisions/cli --for decisions/web --for specs \
+  --literal "rate limit" --semantic "rate limit per client" \
+  --context "<the anchor's title, description and full body, pasted in — not a sentence about this task>" \
+  --omit decisions/api/security/rate-limits/at-the-gateway.md
 ```
 
-Run with the anchor's own key terms, over the store, this brings back records that say the same
-thing in other words — the case neither of the first two sources reaches.
+Repeat `--for` once per declared component plus `specs` — the search covers the **whole store**, not
+just the anchor's own surface. A cross-component conflict is exactly what this pass exists to catch: a
+decision in `cli` and one in `web` can contradict each other without sharing a parent, without either
+naming the other in a declared crossing, and without a search scoped to one component ever seeing both
+sides. `--omit` drops the anchor's own path, so it is never scored against itself.
 
-<!-- qmd:start -->
-When qmd is registered, that one call runs both a literal pass and a pass by meaning over the same
-scope. Check the envelope's `semantic` field: `used` means both ran, `lexical-only` means only the
-wording match did, `unavailable` means neither did. When it is anything but `used`, this source has
-degraded to the literal pass alone — say so in the report rather than silently returning fewer
-pairs. A record that says the same thing in different words is precisely what the meaning pass
-exists to catch, and its absence is a real reduction in what this skill can see.
-<!-- qmd:end -->
+**`--context` is the anchor record itself** — its `title`, `description` and full body, pasted in whole
+— never a sentence describing the reconciliation task. This was measured, not assumed: scoring every
+candidate against the anchor's own text gets recall 0.94; describing what you are doing in prose does
+not come close. Jev is answering "how close is this record to the anchor," and the anchor's own words
+are the only text that actually poses that question.
+
+If the whole-store search's scope is unwieldy — a store with many components — a narrower one scoped to
+the anchor's own component plus whatever the declared crossing named is a reasonable fallback, but say so
+plainly in the report: a narrowed scope is a weaker coverage claim, and a reader relying on this check
+needs to know which one they got.
 
 Together, these three return five to fifteen records, not two hundred. That bound is the whole
 reason this skill is runnable at all — a person can read fifteen records against one anchor in one
 sitting, and nobody can read two hundred against two hundred.
+
+## Review every record the search returns
+
+`search` stores what it served; skipping the review step is not an option. For every path in `records`
+(and any `discarded` record worth a second look):
+
+```
+openrecord review open <search-id> <path>
+```
+
+Read it as a pair against the anchor — exactly the comparison "What counts as a finding" below asks
+for — then mark it:
+
+```
+openrecord review mark <search-id> <path> --verdict contradicts   # a genuine finding, defined below
+openrecord review mark <search-id> <path> --verdict governs       # same subject, compatible — no conflict, worth the pairing on record
+openrecord review mark <search-id> <path> --verdict unrelated     # not actually about the same subject
+```
+
+`openrecord review status <search-id>` must exit 0 — every served record carrying a verdict — before
+you report anything in "Say what you found" below. A record marked `contradicts` is what gets written up
+as a finding there; `governs` and `unrelated` are both "checked, no conflict," and the only difference
+between them is whether the two records actually share a subject.
 
 ## What counts as a finding
 
@@ -169,11 +205,21 @@ Reconcile: decisions/api/security/rate-limits/at-the-gateway.md [accepted]
    the same sentence as above.
    Why both cannot hold: the spec promises exactly the per-endpoint behaviour
    the decision rules out.
-   Surfaced by: search "rate limit per client"
+   Surfaced by: search "rate limit per client" (20261004T153012Z-a1b2c3)
+   Reviewed: contradicts
 
-Checked, no conflict: decisions/api/security/token-identity.md — sibling in the
-same concern, about identity, not about limits.
+Checked, no conflict:
+- decisions/api/security/token-identity.md — sibling in the same concern, about
+  identity, not about limits.
+- decisions/api/runtime/retry-budget.md — search "rate limit per client"
+  (20261004T153012Z-a1b2c3), reviewed: governs. Same subject (request throttling),
+  compatible: this one covers retries after a 429, not the limit itself.
 ```
+
+Every pair that came from `search` carries the verdict `review mark` recorded for it — `contradicts` is
+what makes a pair a finding above; `governs` and `unrelated` are both what makes a pair land in "checked,
+no conflict" instead. A pair with no `Reviewed` line is one the review step has not reached yet, and
+nothing below should be reported until `review status` says otherwise.
 
 If nothing was found, say what the neighbourhood contained and how each source contributed —
 otherwise a reader cannot tell "checked and clean" from "nobody looked," which is the same failure
