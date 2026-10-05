@@ -150,6 +150,65 @@ stateDiagram-v2
 [docs/decision-record.md](docs/decision-record.md) explains both in full.
 
 ## Documentation
+## Checking that a record is still true
+
+`validate` checks that a record is well formed. It never checks that it is still *true* — that is
+reading, not linting, and nothing in a record's body is machine-checkable by design. Two skills do
+that reading, and they differ in what they hold the record up against: `openrecord-audit` reads it
+against the code it governs, `openrecord-reconcile` against the other records it could contradict.
+Neither writes, and neither resolves a contradiction on its own.
+
+`audit` starts from one record you name, and never from a whole coordinate — a sweep nobody chose is
+a list nobody reads.
+
+```mermaid
+flowchart TD
+    R["One record, named by you"] --> C["Enumerate what it claims: the sentences that are true or false of the code, not the reasoning behind them"]
+    C --> S{"Which surface does it govern?"}
+    S --> |"A spec: the components its frontmatter names"| P["components.json turns each id into declared directories"]
+    S --> |"A decision: the folder it is filed under"| P
+    P --> N{"Does a declared path still exist?"}
+    N --> |"No"| X["Stop and say so: there is nothing to audit against"]
+    N --> |"Yes"| D["Read that code whole, never grepping it for the record's own wording — that finds only what the record already agrees with"]
+    D --> V["One verdict per claim, each carrying a file and a line"]
+    V --> H["holds: the line that implements it"]
+    V --> T["contradicted: the line that does something else"]
+    V --> U["unverifiable: the code does not speak to it — a why is not drift, and a record can be mostly why and still be healthy"]
+    T --> Z["Report both sides and stop: which of the two is wrong is a person's call"]
+```
+
+`reconcile` starts from one record too, for a harder reason: comparing every record against every
+other does not scale, and two hundred records are twenty thousand pairs. So it anchors — by default
+on the record just written, the moment it was added without reading the two hundred already there —
+and bounds the neighbourhood through what the store already declares.
+
+```mermaid
+flowchart TD
+    A["One record — the anchor, by default the one just written"] --> W["Build its neighbourhood, three ways"]
+    W --> S1["Siblings: map --for the parent level, filed together because they share a subject"]
+    W --> S2["The declared crossing: from a spec, the decisions of the components it names; from a decision, component owners returns the specs that name it"]
+    W --> S3["search: the literal pass plus meaning, for the record that says the same thing in other words"]
+    S1 --> P["Five to fifteen records, not two hundred"]
+    S2 --> P
+    S3 --> P
+    P --> Q{"Can you write the sentence from each side that cannot both be true?"}
+    Q --> |"No"| G["Say nothing: two records covering the same area is not a finding"]
+    Q --> |"Yes"| B{"Are both accepted?"}
+    B --> |"One is pending"| K["Not a contradiction: a pending record settles nothing"]
+    B --> |"Both accepted"| F["A pair: both sides quoted, and why both cannot hold"]
+    F --> E["Resolving it is the edit-in-place path above, and it is a person's"]
+```
+
+The declared crossing is the one worth the cost. A spec promises what an actor observes and a
+decision constrains how it is built, so the two contradict each other **without sharing vocabulary**
+— neither reading the siblings nor searching the wording reaches that pair, only the declared link
+does.
+
+Both of these are asked for. The check that runs on its own is in `openrecord-consult`: having
+already opened the records that govern the file you are about to change, it says whether each one is
+still true of that file, with the line that shows it. That costs one more look at something already
+open, and it is the only moment the check is free.
+
 
 | | |
 | --- | --- |
