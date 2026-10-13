@@ -84,7 +84,14 @@ func runRecordWrite(env Env, args []string) error {
 	if err := os.WriteFile(full, rendered, 0o644); err != nil {
 		return Errorf(finding.CodeUsage, "write %s: %v", relative, err)
 	}
-	return env.WriteJSON(map[string]any{"written": relative, "warnings": warningsOnly(findings)})
+	output := map[string]any{"written": relative, "warnings": warningsOnly(findings)}
+	if coordinate.Kind == store.Specs {
+		// A decision has no anchorable part — the file is its own unit — so the
+		// field is omitted rather than reported empty, which would read as "this
+		// record has none" instead of "this kind of record never has any".
+		output["anchors"] = check.Anchors(record.Body)
+	}
+	return env.WriteJSON(output)
 }
 
 var sectionPattern = regexp.MustCompile(`(?m)^##\s+.+?\s*$`)
@@ -180,7 +187,11 @@ func runRecordEdit(env Env, args []string) error {
 	if err := os.WriteFile(full, rendered, 0o644); err != nil {
 		return Errorf(finding.CodeUsage, "write %s: %v", relative, err)
 	}
-	return env.WriteJSON(map[string]any{"edited": relative, "section": *section, "warnings": warningsOnly(found)})
+	output := map[string]any{"edited": relative, "section": *section, "warnings": warningsOnly(found)}
+	if coordinate.Kind == store.Specs {
+		output["anchors"] = check.Anchors(existing.Body)
+	}
+	return env.WriteJSON(output)
 }
 
 // replaceSection swaps one `## Heading` block, leaving everything else

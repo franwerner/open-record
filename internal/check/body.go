@@ -62,6 +62,7 @@ func Body(body string, kind store.Kind, specType, path string) []finding.Finding
 	findings = append(findings, checkBranchAnchors(sections, path)...)
 	findings = append(findings, checkTransitions(sections, path)...)
 	findings = append(findings, checkScenarios(sections, path)...)
+	findings = append(findings, checkAnchors(body, path)...)
 	return findings
 }
 

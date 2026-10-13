@@ -163,6 +163,58 @@ An absent required section is reported as `missing-section`; an absent optional 
 - **`## Trigger`** — what event starts this. A process is defined by being triggered by an event rather
   than an actor, so this is the fact that constitutes it.
 
+### Anchors
+
+Every `### Scenario: <name>` has a stable, addressable identifier: its **anchor**. A `lifecycle`
+additionally anchors every transition in `## States and transitions`. Nothing else in a spec is
+anchorable — a `rule`'s body is one undivided statement, and so is everything outside `## Scenarios`
+and `## States and transitions`.
+
+The anchor is a **slug** of the name: lowercase, accents and diacritics stripped (á→a, ñ→n, ü→u),
+everything that is not a letter or digit turned into a hyphen, repeated hyphens collapsed, and the
+result trimmed at both ends.
+
+An anchor is never stored — every consumer recomputes it from the name — so the slug rule is part of
+every reference already written, and it must never change. Accents are stripped by Unicode
+decomposition, which Unicode guarantees stable, not by a hand-written table that could grow and move
+existing anchors. A letter with no decomposition (`ß`, `ø`, `ł`) is kept as written.
+
+```markdown
+### Scenario: Archivo muy grande (más de 50 MB)
+```
+
+anchors as `archivo-muy-grande-mas-de-50-mb`, referenced as
+`specs/flow/subir-archivo.md#archivo-muy-grande-mas-de-50-mb`.
+
+A `lifecycle` transition anchors as `<source>-to-<target>`, each side slugged the same way:
+
+```markdown
+## States and transitions
+- pending → paid (the payment is confirmed)
+```
+
+anchors as `pending-to-paid`, referenced as `specs/lifecycle/order.md#pending-to-paid`. The
+parenthesised note is not part of the anchor.
+
+**Why a name, not a step number.** A branch anchor (`## Branches`) is a step number because a branch
+exists to fork off one specific step. A scenario or a transition needs an identifier that survives
+editing: inserting a step renumbers everything after it, silently moving any reference that used a
+number, while a name does not move when content is inserted around it — if it is renamed or deleted, the
+reference breaks in a way that can be detected.
+
+**One namespace per record.** A scenario and a transition share it, so a scenario whose name slugs to
+`pending-to-paid` collides with a transition between `pending` and `paid` just as much as it would
+collide with another scenario. `record write` and `record edit` reject two anchors that collide — error
+`duplicate-anchor` — and so does `validate` on a record already in the store. An anchor pointing nowhere
+(a stale reference from outside the record) is a problem for whatever consumes that reference, not for
+this check.
+
+A name with no letters or digits at all — nothing survives the slug — has no anchor to give it, reported
+as `empty-anchor`.
+
+A `rule` and a decision reference the whole file, with no `#` at all — see
+[decision-record.md](decision-record.md#no-internal-anchors).
+
 ### Sections that do not apply are deleted
 
 Entirely — never left empty, never `N/A`. An empty section reads as "nobody wrote this yet"; an absent

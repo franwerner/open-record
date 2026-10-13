@@ -43,6 +43,8 @@ const (
 	CodeMissingSection       = "missing-section"
 	CodeUnexpectedSection    = "unexpected-section"
 	CodeMalformedScenario    = "malformed-scenario"
+	CodeEmptyAnchor          = "empty-anchor"
+	CodeDuplicateAnchor      = "duplicate-anchor"
 	CodeBodyHashMissing      = "body-hash-missing"
 	CodeBodyHashMismatch     = "body-hash-mismatch"
 	CodeJevUnavailable       = "jev-unavailable"

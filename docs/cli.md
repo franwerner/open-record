@@ -282,6 +282,21 @@ find out.
 An existing file is replaced without a flag. The caller always sends complete content, so a
 confirmation flag would be one the agent sets every time.
 
+**A successful write on a spec also reports its `anchors`** — every scenario and, for a `lifecycle`,
+every transition, in document order, as the slug a future reference uses (see
+[capability-spec.md](capability-spec.md#anchors) for the rule):
+
+```json
+{
+  "written": "specs/flow/user-signup.md",
+  "warnings": [],
+  "anchors": ["password-too-short", "email-already-registered"]
+}
+```
+
+A decision has no anchorable part, so the field is left out rather than reported empty — the two read
+differently: "this record has none" against "this kind of record never has any".
+
 ### `record edit`
 
 Replaces one section, addressed by its heading.
@@ -292,12 +307,15 @@ openrecord record edit decisions/api/security/rate-limiting.md \
   --body-file ./new-alternatives.md
 ```
 
-The binary swaps that section, revalidates the whole file, and writes only if it still holds.
+The binary swaps that section, revalidates the whole file, and writes only if it still holds — including
+against two anchors colliding, even when the colliding section is the one left untouched.
 
 **Addressed by section, not by line.** Line numbers are the fragile way to do this: a caller working
 from a stale view of the file patches the wrong place, and the result can still pass validation. Here
 the sections are known and fixed, so the caller says what it means — *change the alternatives* —
 instead of translating that into coordinates that may have moved.
+
+Its successful reply carries `anchors` on a spec, exactly like `record write`.
 
 ---
 
@@ -344,6 +362,9 @@ disappeared).
 | `undeclared-component` | error | A spec naming a component that does not exist. |
 | `empty-components` | error | A spec with no components. |
 | `branch-anchor-not-found` | error | A branch anchored to a step its flow does not have. |
+| `duplicate-anchor` | error | Two scenarios, two transitions, or a scenario and a transition, that produce the same anchor. |
+| `malformed-scenario` | error | A scenario missing GIVEN/WHEN/THEN. |
+| `empty-anchor` | error | A scenario name, or a state in a transition, with no letters or digits — so it has no anchor at all. |
 | `invalid-frontmatter` | error | Frontmatter absent or malformed. |
 | `body-hash-missing` | error | A record's frontmatter has no `body-hash` field. |
 | `body-hash-mismatch` | error | A `body-hash` is well-formed but does not match the body — the body drifted outside the tool. |

@@ -220,6 +220,77 @@ func TestRecordEditRevalidatesTheWholeFile(t *testing.T) {
 	}
 }
 
+func TestRecordWriteReturnsAnchorsForASpec(t *testing.T) {
+	repo := declared(t)
+	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+	target := "specs/flow/signup.md"
+	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	out := decode[map[string]any](t, mustRun(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--components", "api", "--body-file", bodyFile(t, body)))
+	anchors, ok := out["anchors"].([]any)
+	if !ok {
+		t.Fatalf("anchors is not a list: %v", out)
+	}
+	if len(anchors) != 1 || anchors[0] != "happy-path" {
+		t.Errorf("anchors = %v, want [happy-path]", anchors)
+	}
+}
+
+func TestRecordWriteOmitsAnchorsForADecision(t *testing.T) {
+	// A decision has no anchorable part: the file is its own unit, so the
+	// field is left out rather than reported as an empty list.
+	repo := declared(t)
+	out := decode[map[string]any](t, mustRun(t, repo, "record", "write", "decisions/api/security/x.md",
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--body-file", bodyFile(t, decisionBody)))
+	if _, present := out["anchors"]; present {
+		t.Errorf("a decision reported anchors: %v", out)
+	}
+}
+
+func TestRecordWriteRejectsTwoScenariosThatCollideOnTheSameAnchor(t *testing.T) {
+	repo := declared(t)
+	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+	target := "specs/flow/signup.md"
+	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n" +
+		"### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n\n" +
+		"### Scenario: happy, path!\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	code, stdout, _ := runIn(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--components", "api", "--body-file", bodyFile(t, body))
+	if code == exitOK {
+		t.Fatal("two scenarios colliding on the same anchor were accepted")
+	}
+	if !strings.Contains(stdout, "duplicate-anchor") {
+		t.Errorf("the finding is not on stdout: %s", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(repo, store.Root, filepath.FromSlash(target))); err == nil {
+		t.Error("a rejected write left a file behind")
+	}
+}
+
+func TestRecordEditRejectsAnEditThatIntroducesADuplicateAnchor(t *testing.T) {
+	repo := declared(t)
+	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+	target := "specs/flow/signup.md"
+	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	mustRun(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--components", "api", "--body-file", bodyFile(t, body))
+
+	colliding := "### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n\n" +
+		"### Scenario: happy, path!\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	code, stdout, _ := runIn(t, repo, "record", "edit", target,
+		"--section", "## Scenarios", "--body-file", bodyFile(t, colliding))
+	if code == exitOK {
+		t.Fatal("an edit introducing a duplicate anchor was accepted")
+	}
+	if !strings.Contains(stdout, "duplicate-anchor") {
+		t.Errorf("the finding is not on stdout: %s", stdout)
+	}
+}
+
 func TestValidateExitCodeFollowsSeverity(t *testing.T) {
 	repo := declared(t)
 	mustRun(t, repo, "record", "write", "decisions/api/security/x.md",
