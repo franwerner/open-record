@@ -8,3 +8,6 @@
 # the fixture project under e2e/ carries its store into version control like any
 # real project does.
 /.openrecord/
+
+# Artifacts from local AI flow scenario runs (transcripts, answers, judge output).
+/e2e-ai/.runs/

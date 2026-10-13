@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Local pre-commit hook: the fast deterministic check only. AI scenarios are
+# never run here — they're slow and non-deterministic, and only run before a
+# task is declared finished (see scripts/check.sh and e2e.md).
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO="$(cd "$HERE/.." && pwd)"
+exec "$REPO/scripts/check.sh" fast
