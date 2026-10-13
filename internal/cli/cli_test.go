@@ -163,6 +163,7 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 		"component remove": true,
 		"component owners": true,
 		"diagram":          true,
+		"hook check":       true,
 		"qmd status":       true,
 		"jev status":       true,
 		"review open":      true,

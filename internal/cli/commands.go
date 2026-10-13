@@ -99,9 +99,21 @@ var commands = []*Command{
 	{
 		Name:    "skills",
 		Summary: "Emit the bundled agent skills into a directory.",
-		Usage:   "openrecord skills --emit DIR [--dry-run]",
+		Usage:   "openrecord skills --emit DIR [--dry-run] [--guard]",
 		Flags:   describes(skillsFlags),
 		Run:     runSkills,
+	},
+	{
+		Name:    "hook",
+		Summary: "Claude Code integration: decide a PreToolUse hook's allow/deny.",
+		Sub: []*Command{
+			{
+				Name:    "check",
+				Summary: "Read a PreToolUse tool call as JSON on stdin and print Claude Code's decision JSON on stdout.",
+				Usage:   "openrecord hook check   (reads the tool call as JSON on stdin; takes no flags or arguments)",
+				Run:     runHookCheck,
+			},
+		},
 	},
 	{
 		Name:    "concerns",

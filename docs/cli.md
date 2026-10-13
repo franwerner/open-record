@@ -37,6 +37,7 @@ without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial re
 | `search` | Rank every scoped record against a context with Jev, and store the result for review. |
 | `diagram` | Emit a spec as Mermaid on stdout. |
 | `skills` | Emit the bundled agent skills into a directory you name. |
+| `hook` | Claude Code integration: decide a `PreToolUse` hook's allow/deny. |
 | `concerns` | Print the concerns catalogue. |
 | `qmd` | Report on semantic search, and install it. |
 | `jev` | Report on the Jev ranking model `search` calls. |
@@ -541,6 +542,7 @@ drawing, and silence would read like a bug.
 ```
 openrecord skills --emit .claude/skills/
 openrecord skills --emit .claude/skills/ --dry-run
+openrecord skills --emit .claude/skills/ --guard
 ```
 
 Writes the bundled agent skills into the directory you name — `SKILL.md` files with `name` and
@@ -594,6 +596,148 @@ be undone to add it.
 loaded by the model when its description matches what it is about to do. The behaviour that matters
 here — *before touching this code, find out what governs it* — is exactly what nobody remembers to
 invoke, so it has to fire on its own.
+
+### `--guard`: writes to `.openrecord/` stay behind the binary
+
+Everything inside `.openrecord/` is only trustworthy because the binary validates before it writes and
+refuses to write at all when something fails. If anyone — person or agent — can edit those files
+directly with an editor, that guarantee stops meaning anything. `--guard` installs a mechanical barrier
+against that, **for Claude Code specifically** — the only agent where every layer this needs is
+documented. Two actors, two different defences:
+
+| Against | Mechanism | What it guarantees |
+| --- | --- | --- |
+| An AI agent (Claude Code) | Permissions + process sandbox + a `PreToolUse` hook | A real block, enforced by the operating system |
+| A person editing by hand | `body-hash` (records) and `hash` (JSON files, e.g. `components.json`), checked by `validate` | Detection after the fact, never a block |
+
+Both are necessary, and neither substitutes for the other: a person with direct filesystem access can
+always open a file in an editor, but `validate` (in a pre-commit hook or in CI) will notice. An agent,
+by contrast, can genuinely be stopped before it writes at all.
+
+`--guard` merges three layers into the project's `.claude/settings.json`:
+
+1. **`permissions.deny`** — `Edit(/.openrecord/**)` and `Edit(/.claude/**)`. An `Edit` rule already covers
+   every built-in tool that edits a file by path (`Write` and `NotebookEdit` included), and no permission
+   mode skips a deny rule. The leading `/` anchors each pattern at the project root regardless of the
+   session's current working directory — a bare `.openrecord/**` would instead anchor at wherever the
+   session happened to start, which is not always the project root (see [Claude Code's permissions
+   reference](https://code.claude.com/docs/en/permissions#read-and-edit)).
+2. **`sandbox.*`** — the process sandbox, which blocks a write at the operating-system level, including
+   from a subprocess a hand-written script launches:
+   - `sandbox.enabled: true`, `sandbox.failIfUnavailable: true` — if the sandbox cannot start (a missing
+     dependency, an unsupported platform), Claude Code refuses to start with this configuration rather
+     than silently running unguarded.
+   - `sandbox.allowUnsandboxedCommands: false` — the agent cannot ask to retry a blocked command outside
+     the sandbox.
+   - `sandbox.filesystem.denyWrite: [".openrecord/**", ".claude/**"]` — every write under the store, and
+     under the agent's own configuration, is denied.
+   - `sandbox.excludedCommands: ["openrecord *"]` — the one command allowed to write there: the binary
+     with its arguments, never a wider pattern. Entries use the `Bash(...)` rule syntax, where a pattern
+     without a wildcard is an exact match, so bare `"openrecord"` would only cover the binary run with no
+     arguments and every real write would fail. A call leaves the sandbox only when every command in it
+     matches, and a redirect, a `cd` or a `$(...)` keeps it sandboxed, so `openrecord version; python3
+     ...` cannot ride along. This entry is what lets the real binary still write both `.openrecord/**`
+     and `.claude/**` (e.g. `skills --emit ... --guard` writing `.claude/settings.json` itself).
+   - `permissions.allow: ["Bash(openrecord *)"]` — an excluded command goes through the regular
+     permission flow, so without this every `openrecord` call would ask for confirmation.
+3. **`hooks.PreToolUse`** — a hook entry that calls `openrecord hook check` (below) for every tool call.
+   It is not the barrier — layers 1 and 2 already are — it only gives the agent (and whoever reads the
+   transcript afterward) the matching `openrecord` command instead of a bare rejection.
+
+The merge **preserves whatever is already in `.claude/settings.json`**: an unrelated top-level key, an
+unrelated entry already sitting in an array this touches. Running the emit twice produces byte-identical
+output — every merge only ever appends a missing entry in a fixed position, never reorders what was
+already there. The report lists exactly what was added (`created`), already present (`unchanged`), or
+corrected against a conflicting value (`updated`) — the three structural `sandbox` booleans above are
+pinned to the values this protection needs even if the project's settings disagreed.
+
+**`git` is not excluded from the sandbox.** Restoring a file or switching a branch that touches
+`.openrecord/` is a human action, not the agent's: `git checkout -- .openrecord/components.json` run by
+the agent itself is blocked by the same sandbox rule as anything else, by design. A person runs that
+command themselves, outside the agent's own tool calls.
+
+**Linux and WSL2 need `bubblewrap` and `socat` installed** (`sudo apt install bubblewrap socat`, or your
+distribution's equivalent) for the sandbox to start at all. With `sandbox.failIfUnavailable: true`,
+Claude Code refuses to start with this configuration if either is missing, rather than running without
+the sandbox layer silently. macOS needs neither — it uses the built-in Seatbelt framework.
+
+Two bits of what the original task sketched for this guard turned out to use different Claude Code key
+names than it assumed, verified against the current documentation (`https://code.claude.com/docs/en/*`,
+checked 2026-10-13): `sandbox.filesystem.denyWrite`, `sandbox.excludedCommands`,
+`sandbox.allowUnsandboxedCommands` and `sandbox.failIfUnavailable` were already exactly right. The one
+correction is the `permissions.deny` path form — `/.openrecord/**` (one leading slash, anchored at the
+project root) rather than a bare `.openrecord/**` (anchored at the session's current directory instead).
+
+Two blocks the original task described as part of this guard are **out of scope here**: blocking an edit
+to a check's own configuration file, and blocking `record write`/`record edit` while an implementation run
+is in progress. Both depend on state this binary does not have yet — `checks.json` and a run's `run.json`
+— tracked by issues 09 and 15, and are not required for this guard to be useful on its own.
+
+---
+
+## `hook`
+
+```
+openrecord hook check
+```
+
+The command behind the `PreToolUse` hook `--guard` installs. It reads one Claude Code tool call as JSON
+on stdin and prints Claude Code's own decision JSON on stdout — never the barrier itself (the permissions
+and sandbox layers above are), only the message: which `openrecord` command should have been used
+instead.
+
+**Input** is whatever Claude Code's `PreToolUse` hook sends on stdin; this command reads `tool_name` and
+`tool_input` and ignores the rest (`session_id`, `cwd`, `transcript_path`...).
+
+**Output**, on exit 0, is the current PreToolUse decision shape:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "`.openrecord/components.json` is written only by `openrecord component add` / `openrecord component remove`."
+  }
+}
+```
+
+or, allowing:
+
+```json
+{ "hookSpecificOutput": { "hookEventName": "PreToolUse", "permissionDecision": "allow" } }
+```
+
+**Decisions:**
+
+| Tool call | Decision | Points at |
+| --- | --- | --- |
+| `Edit`/`Write`/`NotebookEdit` on `.openrecord/components.json` | deny | `component add` / `component remove` |
+| `Edit`/`Write`/`NotebookEdit` on a record under `decisions/` or `specs/` | deny | `record write` / `record edit` |
+| `Edit`/`Write`/`NotebookEdit` on an `INDEX.md` | deny | `level add` (or `component add` for a component's own index) |
+| `Edit`/`Write`/`NotebookEdit` on anything else under `.openrecord/` | deny | the matching command, generically |
+| `Edit`/`Write`/`NotebookEdit` under `.claude/` | deny | `skills --emit ... --guard` re-installs it; it is never hand-edited |
+| `Edit`/`Write`/`NotebookEdit` anywhere else | allow | — |
+| `Read`/`Glob`/`Grep`, or any tool this build does not recognize | allow | — |
+| `Bash` whose command text looks like a direct write into `.openrecord/` or `.claude/` (a redirect, `tee`, `sed -i`, `cp`/`mv`/`rm`, `git checkout`/`git restore`) | deny, with an explanation | — |
+| `Bash` that never mentions `.openrecord/` or `.claude/` at all, anywhere in the command text | allow | — |
+
+**The `Bash` check is a best-effort message, not a security boundary.** Unlike the path-based tools
+above, there is no sandboxed-by-construction signal this command can see into for an arbitrary shell
+command — the process sandbox is what actually blocks the write, regardless of what this command says.
+The pattern match exists so a blocked (or merely probing) agent reads an explanation instead of silence,
+and it does not try to be airtight against a command deliberately written to avoid it.
+
+**The scan always runs over the full command text, not just its first word.** There is no "starts with
+`openrecord`, so allow the rest" shortcut: a chained command (`openrecord status && sed -i ...
+.openrecord/components.json`, joined with `&&`, `||`, `;`, a pipe, or command substitution) puts a
+harmless `openrecord` call first and the actual write second, and only scanning the whole string catches
+it. `openrecord status && cat foo` still allows, since nothing in that string matches a deny pattern.
+
+**Fails open on anything it does not recognize** — an unrecognized tool name, an unrecognized
+`tool_input` shape, `Read`/`Glob`/`Grep` — because the one failure mode this command must never cause is
+blocking an unrelated, legitimate tool call. The one case that fails **loud**, not open, is stdin that
+does not parse as JSON at all: that is this command being miscalled, not a tool call to judge, so it
+exits non-zero with a clear error rather than silently allowing or crashing.
 
 ---
 

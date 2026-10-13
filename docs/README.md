@@ -44,6 +44,13 @@ part of the format or the tooling: strip them and layers 1 and 2 still work. ope
 position on who may write a record or when — there is no role vocabulary, and the commands are
 mechanical actions a consumer calls.
 
+The same command, with `--guard`, also installs a Claude-Code-specific guarantee: writes to
+`.openrecord/` only ever happen through this binary. A person editing by hand is still only ever
+*detected* (by the `body-hash`/`hash` integrity checks `validate` runs); an AI agent can genuinely be
+*blocked*, at the operating-system level, before it writes at all — see
+[cli.md#--guard](cli.md#--guard-writes-to-openrecord-stay-behind-the-binary) and
+[cli.md#hook](cli.md#hook).
+
 Seven skills, each with its own trigger — the CLI already does the mechanics, so what these carry is
 judgement:
 
