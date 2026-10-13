@@ -73,7 +73,7 @@ judgement:
 │       ├── INDEX.md
 │       ├── <capability>.md
 │       └── [<subgroup>/]
-└── components.json             the declared surfaces, and the format version
+└── components.json             the declared surfaces, the format version, and an integrity hash
 ```
 
 Two rules generate most of this layout:

@@ -51,6 +51,16 @@ func runComponentAdd(env Env, args []string) error {
 	if err != nil && !store.IsUndeclared(err) {
 		return err
 	}
+	// A components.json that exists is checked before anything else touches
+	// it: writing over a file edited outside the tool would launder the
+	// edit into a hash that now matches again, which is the one thing this
+	// mechanism exists to prevent. A genuinely undeclared store has no file
+	// yet, so there is nothing to have tampered with.
+	if err == nil {
+		if findings := store.VerifyComponents(env.Repo, set); len(findings) > 0 {
+			return findings[0]
+		}
+	}
 	if set.Has(id) {
 		return Errorf(finding.CodeUsage, "%q is already declared; edit %s or remove it first", id, store.ComponentsFile)
 	}
@@ -84,6 +94,9 @@ func runComponentRemove(env Env, args []string) error {
 	set, err := store.LoadComponents(env.Repo)
 	if err != nil {
 		return err
+	}
+	if findings := store.VerifyComponents(env.Repo, set); len(findings) > 0 {
+		return findings[0]
 	}
 	if !set.Has(id) {
 		return Errorf(finding.CodeUsage, "%q is not declared", id)

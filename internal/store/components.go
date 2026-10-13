@@ -26,6 +26,23 @@ type Component struct {
 type Components struct {
 	Version    string      `json:"version"`
 	Components []Component `json:"components"`
+	// Hash is the integrity stamp: the SHA-256 hex digest of this file with
+	// this field excluded, stamped by Save on every write and checked by
+	// VerifyHash. Last field on purpose, so it serializes as the last key —
+	// the same convention body-hash follows at the end of a record's
+	// frontmatter. See docs/decision-record.md#hash for the formula, which
+	// every other JSON file the binary writes inside .openrecord/ reuses
+	// unchanged.
+	Hash string `json:"hash,omitempty"`
+}
+
+// StoredHash implements HashCarrier.
+func (s Components) StoredHash() string { return s.Hash }
+
+// WithHash implements HashCarrier.
+func (s Components) WithHash(hash string) any {
+	s.Hash = hash
+	return s
 }
 
 // LoadComponents reads the declaration.
@@ -53,6 +70,17 @@ func LoadComponents(repo string) (Components, error) {
 	return set, nil
 }
 
+// VerifyComponents runs VerifyHash over components.json as it sits on disk.
+// It is what validate and every writer of the file call; a store with no
+// declaration yet has nothing to verify.
+func VerifyComponents(repo string, set Components) []finding.Finding {
+	raw, err := os.ReadFile(filepath.Join(repo, filepath.FromSlash(ComponentsFile)))
+	if err != nil {
+		return nil
+	}
+	return VerifyHash(ComponentsFile, raw, set)
+}
+
 // IsUndeclared reports the one failure a caller may reasonably continue from:
 // no declaration exists yet. A malformed or unreadable one is a different
 // problem and must not be papered over by starting fresh.
@@ -61,11 +89,16 @@ func IsUndeclared(err error) bool {
 	return ok && item.Code == finding.CodeComponentsUndeclared
 }
 
-// Save writes the declaration, stamping the format so no caller has to remember
-// to.
+// Save writes the declaration, stamping the format and the integrity hash so
+// no caller has to remember to.
 func (s Components) Save(repo string) error {
 	s.Version = Format
 	sort.Slice(s.Components, func(i, j int) bool { return s.Components[i].ID < s.Components[j].ID })
+	hash, err := StampHash(s)
+	if err != nil {
+		return err
+	}
+	s.Hash = hash
 	raw, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return err

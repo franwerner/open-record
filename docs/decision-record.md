@@ -176,6 +176,75 @@ and `record edit` recomputes and re-stamps it on every edit, including one that 
 `description` or `status`. `validate` reports a body that no longer matches its stamped value, so a
 change made outside the tool becomes detectable without depending on git or on any agent harness.
 
+A writer never recomputes this blindly over whatever is already on disk: `record edit` refuses, before
+touching anything, when the existing body no longer matches its stamped `body-hash` — recomputing it
+first would silently re-stamp a hand-edit into a hash that matches again, which is exactly what this
+mechanism exists to catch. `record write`, which replaces an existing file whole with no flag, applies
+the same refusal when a file already sits at that path. Either refusal reports `body-hash-mismatch` and
+leaves the file byte-for-byte as it was; the only way out is to restore the original content (`git
+checkout`, typically), never to force a re-stamp.
+
+### `hash` — the same mechanism, for JSON files {#hash}
+
+Every JSON file the binary writes inside `.openrecord/` carries the same idea as `body-hash`, under the
+field name `hash`: a SHA-256 hex digest the binary stamps on write and `validate` checks on read, so a
+hand-edit to a JSON file is just as detectable as a hand-edit to a record's body. `components.json` is
+the first file to carry it; `actors.json`, `checks.json`, `sandbox.json`, and the files under
+`implementation/` and `runs/` adopt it unchanged as the issues that introduce them land
+(`internal/store/integrity.go` is the one implementation every one of them reuses).
+
+**The formula**, defined once here so no later issue has to invent it again:
+
+1. Take the value about to be written, with its `hash` field cleared. An empty string excludes the
+   field from the JSON entirely, because the field is declared with `omitempty`.
+2. Serialize it the same way the binary always does: `json.MarshalIndent(value, "", "  ")`.
+3. Append the one trailing newline every file the binary writes ends with.
+4. The hash is the SHA-256 of those exact bytes, hex-encoded.
+
+The binary then sets `hash` to that value and serializes a second time — now with the field present, so
+it lands as the very last key, the same visual convention `body-hash` follows at the end of a record's
+frontmatter:
+
+```json
+{
+  "version": "1",
+  "components": [
+    { "id": "api", "paths": ["src/api"] }
+  ],
+  "hash": "3f9a2c..."
+}
+```
+
+To verify a file already on disk, parse it, clear its `hash` field, and recompute the same digest — and
+then also require the file to be byte-for-byte what serializing the parsed value produces. The second
+step is not optional: parsing drops any key the format does not declare, so a field added by hand would
+vanish before the digest is recomputed and the file would pass on the hash alone. The binary is the only
+writer and always writes the same bytes for the same value, so any byte it would not have written —
+an unknown key, a reordered one, reformatted whitespace — means something else wrote the file. Two
+findings cover the ways that check fails, used by every JSON file this mechanism protects:
+
+| Code | Severity | What it catches |
+| --- | --- | --- |
+| `json-hash-missing` | Error | The file has no `hash` field at all. |
+| `json-hash-mismatch` | Error | The hash no longer matches the content, or the file is not byte-for-byte what the binary writes — it was edited outside the tool. |
+
+**`validate` reports both**, for `components.json` today and for every later JSON file this mechanism
+covers, as part of its normal recursive walk. Files under `runs/` are a deliberate exception: they are
+gitignored working data, not part of the coordinate `validate` walks by default, so an old or corrupt
+run never blocks a `validate` over records that have nothing to do with it; the binary still stamps and
+can check their `hash`, just not from `validate` itself (see issue 15).
+
+**A writer refuses rather than re-stamping.** `component add` and `component remove` check
+`components.json`'s hash before touching it: a missing hash or a mismatch both refuse the write with the
+matching code, leaving the file untouched, the same way `record edit` refuses over a tampered
+`body-hash`. The fix is always to restore the original file — `git checkout .openrecord/components.json`
+is the usual case — never to patch the `hash` field by hand or ask the tool to re-stamp over the
+tampered content.
+
+**Read-only commands are unaffected.** `map`, `grep`, `search`, `diagram` and anything else that only
+reads keep working against a `components.json` with a missing or mismatching hash: reading it does not
+launder a tamper the way writing over it would. Only `validate` and a writer refuse.
+
 ### What is deliberately not here
 
 - **`date`** — git knows when the file was created and last touched, and cannot drift. A hand-written

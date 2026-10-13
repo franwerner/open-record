@@ -47,6 +47,8 @@ const (
 	CodeDuplicateAnchor      = "duplicate-anchor"
 	CodeBodyHashMissing      = "body-hash-missing"
 	CodeBodyHashMismatch     = "body-hash-mismatch"
+	CodeJSONHashMissing      = "json-hash-missing"
+	CodeJSONHashMismatch     = "json-hash-mismatch"
 	CodeJevUnavailable       = "jev-unavailable"
 	CodeQmdUnavailable       = "qmd-unavailable"
 	CodeQmdNotIndexed        = "qmd-not-indexed"

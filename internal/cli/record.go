@@ -57,6 +57,25 @@ func runRecordWrite(env Env, args []string) error {
 	if err != nil {
 		return err
 	}
+	relative := path.Join(coordinate.String(), slug+".md")
+	full := filepath.Join(coordinate.Dir(env.Repo), slug+".md")
+
+	// An existing file is replaced whole, with no flag — but replacing one
+	// whose body no longer matches its stamped hash would silently launder a
+	// hand-edit into a fresh, matching one. Checked before anything about
+	// the new content, so a tampered record blocks the write exactly like a
+	// tampered one blocks `record edit`, parse errors on the old file aside:
+	// those are what this same write is about to replace.
+	if existingRaw, readErr := os.ReadFile(full); readErr == nil {
+		existing, _ := store.ParseRecord(existingRaw, coordinate.Kind, relative)
+		if existing.BodyHash != "" && store.BodyHash(existing.Body) != existing.BodyHash {
+			return writeRejected(env, "written", relative, []finding.Finding{
+				finding.Errorf(finding.CodeBodyHashMismatch,
+					"%s was changed outside the tool: its body no longer matches its stamped hash; restore it (e.g. from git) rather than writing over it", relative).At(relative),
+			})
+		}
+	}
+
 	record := store.Record{
 		Title:       *title,
 		Description: *description,
@@ -71,7 +90,6 @@ func runRecordWrite(env Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	relative := path.Join(coordinate.String(), slug+".md")
 	findings := check.Sorted(check.Record(rendered, coordinate, declared, relative))
 	// Only an error stops the write. A warning is maintenance — a state with no
 	// way out, a level growing flat — and refusing to record something over one
@@ -80,7 +98,6 @@ func runRecordWrite(env Env, args []string) error {
 		return writeRejected(env, "written", relative, findings)
 	}
 
-	full := filepath.Join(coordinate.Dir(env.Repo), slug+".md")
 	if err := os.WriteFile(full, rendered, 0o644); err != nil {
 		return Errorf(finding.CodeUsage, "write %s: %v", relative, err)
 	}
@@ -140,6 +157,17 @@ func runRecordEdit(env Env, args []string) error {
 	existing, findings := store.ParseRecord(raw, coordinate.Kind, relative)
 	if finding.HasError(findings) {
 		return writeRejected(env, "edited", relative, check.Sorted(findings))
+	}
+	// Checked here, before anything below touches existing.Body: recomputing
+	// BodyHash unconditionally at the end of this function (as it used to)
+	// would silently re-stamp a body that was tampered with outside the
+	// tool, laundering the tampering into a hash that matches again instead
+	// of ever reporting it.
+	if existing.BodyHash != "" && store.BodyHash(existing.Body) != existing.BodyHash {
+		return writeRejected(env, "edited", relative, []finding.Finding{
+			finding.Errorf(finding.CodeBodyHashMismatch,
+				"%s was changed outside the tool: its body no longer matches its stamped hash; restore it (e.g. from git) rather than editing it further", relative).At(relative),
+		})
 	}
 
 	if *section != "" {

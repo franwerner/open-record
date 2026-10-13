@@ -60,6 +60,11 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 	} else {
 		findings = append(findings, declared.Validate(repo)...)
 		findings = append(findings, orphanComponentFolders(repo, declared)...)
+		// Whether the file itself can be trusted is a question of its own,
+		// independent of whether what it declares is well-formed: a
+		// components.json edited by hand to add a path can still be
+		// perfectly valid shape-wise.
+		findings = append(findings, store.VerifyComponents(repo, declared)...)
 	}
 
 	files, walkFindings, err := store.Walk(repo, coordinate)

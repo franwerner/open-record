@@ -419,7 +419,7 @@ func TestRecordEditMetadataOnlyLeavesTheHashUnchanged(t *testing.T) {
 	}
 }
 
-func TestRecordEditSucceedsOnADriftedRecord(t *testing.T) {
+func TestRecordEditRefusesADriftedRecord(t *testing.T) {
 	repo := declared(t)
 	target := "decisions/api/security/rate-limiting.md"
 	mustRun(t, repo, "record", "write", target,
@@ -428,19 +428,74 @@ func TestRecordEditSucceedsOnADriftedRecord(t *testing.T) {
 	full := filepath.Join(repo, store.Root, filepath.FromSlash(target))
 
 	// Drift the body outside the tool, leaving the stamped hash stale.
-	raw, err := os.ReadFile(full)
+	before, err := os.ReadFile(full)
 	if err != nil {
 		t.Fatal(err)
 	}
-	drifted := strings.Replace(string(raw), "## Context\n\nx", "## Context\n\nchanged by hand", 1)
+	drifted := strings.Replace(string(before), "## Context\n\nx", "## Context\n\nchanged by hand", 1)
 	if err := os.WriteFile(full, []byte(drifted), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	if code, _, stderr := runIn(t, repo, "record", "edit", target, "--title", "still editable"); code != exitOK {
-		t.Fatalf("editing a drifted record was refused: %s", stderr)
+	// Recomputing and re-stamping the hash here would launder the hand-edit
+	// into one that matches again — the one thing this mechanism must never
+	// do. The edit must refuse, and the file must stay exactly as drifted.
+	code, stdout, _ := runIn(t, repo, "record", "edit", target, "--title", "still editable")
+	if code == exitOK {
+		t.Fatalf("editing a drifted record was accepted: %s", stdout)
 	}
-	mustRun(t, repo, "validate")
+	if !strings.Contains(stdout, "body-hash-mismatch") {
+		t.Errorf("edit did not report body-hash-mismatch: %s", stdout)
+	}
+	after, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != drifted {
+		t.Error("the drifted file was changed by the refused edit")
+	}
+
+	if _, stdout, _ := runIn(t, repo, "validate"); !strings.Contains(stdout, "body-hash-mismatch") {
+		t.Errorf("validate did not report the drifted record: %s", stdout)
+	}
+}
+
+func TestRecordWriteRefusesToOverwriteADriftedRecord(t *testing.T) {
+	repo := declared(t)
+	target := "decisions/api/security/rate-limiting.md"
+	mustRun(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--body-file", bodyFile(t, decisionBody))
+	full := filepath.Join(repo, store.Root, filepath.FromSlash(target))
+
+	before, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	drifted := strings.Replace(string(before), "## Context\n\nx", "## Context\n\nchanged by hand", 1)
+	if err := os.WriteFile(full, []byte(drifted), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// A plain write replaces an existing file whole, with no flag — but
+	// doing so over a drifted record would launder the tampering into brand
+	// new, matching content, which is exactly what this must refuse instead.
+	code, stdout, _ := runIn(t, repo, "record", "write", target,
+		"--title", "t", "--description", "d", "--status", "accepted",
+		"--body-file", bodyFile(t, decisionBody))
+	if code == exitOK {
+		t.Fatalf("writing over a drifted record was accepted: %s", stdout)
+	}
+	if !strings.Contains(stdout, "body-hash-mismatch") {
+		t.Errorf("write did not report body-hash-mismatch: %s", stdout)
+	}
+	after, err := os.ReadFile(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != drifted {
+		t.Error("the drifted file was changed by the refused write")
+	}
 }
 
 func TestHashLessRecordIsRefusedWhereverItIsRead(t *testing.T) {

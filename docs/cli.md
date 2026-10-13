@@ -158,7 +158,11 @@ openrecord component add api \
 ```
 
 Creates `components.json` if it is absent — with the format version in it — adds the entry, and creates
-`decisions/api/` with its `INDEX.md`.
+`decisions/api/` with its `INDEX.md`. Every write stamps `components.json`'s integrity `hash` (see
+[decision-record.md](decision-record.md#hash) for the formula), and refuses instead of writing — with
+`json-hash-missing` or `json-hash-mismatch`, file untouched — when the existing `components.json`
+cannot be trusted: a hand-edit, such as adding a path directly in the file, invalidates it the same way
+editing a record's body outside the tool invalidates its `body-hash`.
 
 `--title` and `--description` are required, and the command fails without them. The description is what
 tells a later reader when to descend into this component, and it is prose the binary cannot invent.
@@ -178,6 +182,10 @@ hold it:
 
 Either one and the command fails, naming what is holding it. Deleting records as a side effect of a
 configuration change is the worst thing this command could do.
+
+Like `component add`, it refuses before touching the file when `components.json` cannot be trusted —
+`json-hash-missing` or `json-hash-mismatch`, file untouched. Restore the file (`git checkout`, typically)
+rather than asking the tool to re-stamp over a hand-edit.
 
 ### Paths are directories, not globs
 
@@ -280,7 +288,10 @@ pointing at steps that exist and transition lines in the fixed shape. Every othe
 find out.
 
 An existing file is replaced without a flag. The caller always sends complete content, so a
-confirmation flag would be one the agent sets every time.
+confirmation flag would be one the agent sets every time. If a record already sits at that path and its
+body no longer matches its stamped `body-hash`, the write refuses with `body-hash-mismatch` and leaves
+the existing file untouched, exactly like `record edit` below — writing over a hand-edited body would
+launder it into a fresh, matching hash instead of ever reporting the tamper.
 
 **A successful write on a spec also reports its `anchors`** — every scenario and, for a `lifecycle`,
 every transition, in document order, as the slug a future reference uses (see
@@ -310,6 +321,12 @@ openrecord record edit decisions/api/security/rate-limiting.md \
 The binary swaps that section, revalidates the whole file, and writes only if it still holds — including
 against two anchors colliding, even when the colliding section is the one left untouched.
 
+Before any of that, it checks whether the record it is about to edit can be trusted: if the body
+already on disk no longer matches its stamped `body-hash`, the edit refuses with `body-hash-mismatch`
+and the file stays exactly as it was. This runs before the new section is even applied, because
+recomputing `body-hash` from whatever is on disk — as the old behaviour did — would silently re-stamp a
+hand-edit into a hash that matches again, which defeats the entire mechanism.
+
 **Addressed by section, not by line.** Line numbers are the fragile way to do this: a caller working
 from a stale view of the file patches the wrong place, and the result can still pass validation. Here
 the sections are known and fixed, so the caller says what it means — *change the alternatives* —
@@ -329,6 +346,14 @@ openrecord validate                        → the whole store
 openrecord validate --for decisions/api    → api and everything below it
 ``` It never judges whether a record is *honest* or still true of the
 code — that is reading, not linting.
+
+This walk covers `components.json`, records and indexes — everything that sits next to the store
+proper, including `actors.json`, `checks.json`, `sandbox.json` and `implementation/` as later issues
+introduce them. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
+not part of the coordinate this walk covers by default, so an old or corrupt run never blocks a
+`validate` over records that have nothing to do with it. The binary still stamps and can check their
+`hash` (see [decision-record.md](decision-record.md#hash)), just through the execution's own commands
+rather than through `validate`.
 
 ### Findings are classified
 
@@ -368,6 +393,8 @@ disappeared).
 | `invalid-frontmatter` | error | Frontmatter absent or malformed. |
 | `body-hash-missing` | error | A record's frontmatter has no `body-hash` field. |
 | `body-hash-mismatch` | error | A `body-hash` is well-formed but does not match the body — the body drifted outside the tool. |
+| `json-hash-missing` | error | A JSON file the binary writes inside `.openrecord/` (`components.json` today) has no `hash` field. |
+| `json-hash-mismatch` | error | A JSON file's `hash` does not match its content, or the file is not byte-for-byte what the binary writes — it was edited outside the tool. See [decision-record.md](decision-record.md#hash) for the formula. |
 | `index-missing-description` | error | An `INDEX.md` with no `title` or no `description`. |
 | `component-path-missing` | warning | A declared directory that is not in the repository — silent drift. |
 | `unreachable-state` / `dead-end-state` | warning | A state with no way in, or no way out. A design bug nobody sees today. |
