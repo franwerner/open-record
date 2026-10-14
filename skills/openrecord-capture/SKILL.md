@@ -139,6 +139,25 @@ openrecord map --for decisions/<component>/<concern>
 - **Create** — the store did not cover this.
 - **Nothing** — most of the time.
 
+## Write it so a check could fail
+
+Before writing, look up the claim you are about to make in the verification catalogue:
+
+```
+openrecord verification <key>
+```
+
+A functional spec's key is its type and aspect (`flow/main-flow`, `lifecycle/transitions`,
+`rule`...); a `quality` spec's key is its attribute (`latency`, `accessibility`...); a decision's key is
+its concern and topic (`security/rate-limiting`...). No key in hand yet? `openrecord verification` with
+none prints the whole catalogue. Each entry says what the record needs to contain to be verifiable at
+all, and where that kind of claim typically lands (`on-change`, `pre-merge`, `pre-release`,
+`production`, `manual`).
+
+Write the record so a check could fail against it, and if the person has not said how it would be
+verified, suggest one — as a suggestion, never a tool picked on their behalf, and never a `checks.json`
+entry created on the spot: that registry is a separate, later decision, not this skill's to make.
+
 ## Writing
 
 If the level does not exist yet:

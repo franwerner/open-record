@@ -169,6 +169,7 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 		"jev status":       true,
 		"review open":      true,
 		"review status":    true,
+		"verification":     true,
 		"version":          true,
 	}
 	var walk func(prefix string, list []*Command)

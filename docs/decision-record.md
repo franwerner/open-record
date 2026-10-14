@@ -364,6 +364,11 @@ changes — and re-evaluation is the only thing that keeps a store of decisions 
 
 The choice, developed. The `description` states it in one line; this is where it is explained.
 
+Not sure how to write it so it could actually be checked? `openrecord verification <concern>/<topic>`
+(for example `openrecord verification security/rate-limiting`) says what the decision needs to contain
+to be verifiable, a typical mechanism, and where that kind of check lands — never a tool to pick on your
+behalf.
+
 ### `## Alternatives`
 
 What was rejected, and why. **This is what separates a decision from a rule someone wrote down**: with

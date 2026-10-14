@@ -149,6 +149,12 @@ var commands = []*Command{
 		Run:     runConcerns,
 	},
 	{
+		Name:    "verification",
+		Summary: "Print the verification catalogue: how a record's claim would be checked.",
+		Usage:   "openrecord verification [KEY]",
+		Run:     runVerification,
+	},
+	{
 		Name:    "qmd",
 		Summary: "Report on semantic search, and install it.",
 		Sub: []*Command{

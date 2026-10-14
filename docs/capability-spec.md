@@ -300,6 +300,10 @@ CI, an SLO, a manual review), write that as `VERIFIED-IN` even if it does not ex
 more sources will exist once they land: a **check** (issue 09) covering the scenario with `enforces`,
 and a **sandbox** (issue 11) approximating it in local with `approximates`. Neither is implemented yet.
 
+Not sure what to write, or what a given attribute's `VERIFIED-IN` usually looks like? `openrecord
+verification <attribute>` (for example `openrecord verification latency`) says what the scenario needs
+to contain to be verifiable at all, and which of the three values it typically takes.
+
 ### Anchors
 
 Every `### Scenario: <name>` has a stable, addressable identifier: its **anchor**. A `lifecycle`

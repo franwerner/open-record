@@ -103,3 +103,4 @@ the way a host builds a list of available skills, so there is nothing to fall ou
 | [capability-spec.md](capability-spec.md) | The same for capability specs, plus the five types and Mermaid rendering. |
 | [cli.md](cli.md) | Every command. |
 | [concerns.md](concerns.md) | The catalogue: ten concerns and the places projects usually have a decision worth recording. |
+| [verification.md](verification.md) | The other catalogue: for a functional spec, a `quality` spec, or a decision, what it takes for the record to be verifiable, and how. |

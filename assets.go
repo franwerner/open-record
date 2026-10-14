@@ -8,8 +8,11 @@ package openrecord
 import "embed"
 
 // Assets holds the concerns catalogue, which `level add` reads for a default
-// description, and the agent skills, which `skills --emit` writes out.
+// description; the verification catalogue, which `openrecord verification`
+// slices entries out of; and the agent skills, which `skills --emit` writes
+// out.
 //
 //go:embed docs/concerns.md
+//go:embed docs/verification.md
 //go:embed skills
 var Assets embed.FS

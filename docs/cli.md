@@ -40,6 +40,7 @@ without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial re
 | `skills` | Emit the bundled agent skills into a directory you name. |
 | `hook` | Claude Code integration: decide a `PreToolUse` hook's allow/deny. |
 | `concerns` | Print the concerns catalogue. |
+| `verification` | Print the verification catalogue: how a record's claim would be checked. |
 | `qmd` | Report on semantic search, and install it. |
 | `jev` | Report on the Jev ranking model `search` calls. |
 | `review` | Open, mark and check a stored search's review. |
@@ -926,6 +927,35 @@ the document is the deliverable, and anything that reassembled it would drift fr
 
 `--json` returns the concern names with their descriptions, for a caller that wants to pick one rather
 than read. The topics stay out of it — they name nothing and exist to be read.
+
+---
+
+## `verification`
+
+```
+openrecord verification
+openrecord verification KEY
+```
+
+Prints the verification catalogue — the other document of this kind, alongside `concerns.md`. Where
+that one is a tunnel of questions for *what was decided*, this one is a tunnel of questions for *how
+would anyone know the code still does it*: for every functional spec aspect, every `quality` attribute,
+and every `concerns.md` topic, what the record has to say to be verifiable, a typical mechanism, where
+that kind of check lands, and its class — `full-check`, `partial-check+audit`, or `manual-only`.
+
+Like the concerns catalogue, **it ships inside the binary and never enters a project**, and it names no
+tool to pick: every tool mentioned in it is an example, never a choice.
+
+With no argument, the whole document is printed **verbatim** from the embedded copy, the same reasoning
+`concerns` follows: the document is the deliverable, and rebuilding it from parsed entries risks
+drifting from what actually ships.
+
+With a `KEY`, only that entry is printed — again verbatim, sliced out of the document rather than
+reassembled. A key is `<spec-type>/<aspect>` for a functional spec (`flow/main-flow`,
+`lifecycle/transitions`...), a bare attribute for a `quality` spec (`latency`, `accessibility`...), or
+`<concern>/<topic>` for a decision (`security/rate-limiting`...) — the same topic names `concerns.md`
+already uses. An unknown key is a usage error that lists the valid keys of the gate it looks closest to,
+or every key if none looks close.
 
 ---
 

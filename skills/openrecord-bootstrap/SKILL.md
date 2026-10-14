@@ -62,6 +62,13 @@ Ask for the trade-off too. A choice with no rejected alternative is a convention
 choice with one is a decision, and the alternative is often the most useful thing in the record two
 years later.
 
+**Before writing the decision, check how it would be verified.** `openrecord verification
+<concern>/<topic>` (for example `openrecord verification security/rate-limiting`) says what the record
+needs to contain to be checkable at all, and where that kind of decision typically lands (`on-change`,
+`pre-merge`, `pre-release`, `production`, `manual`). Write the decision so a check could fail against
+it, and suggest how it would be verified if the person has not said — as a suggestion, never a tool
+picked on their behalf, and never a `checks.json` entry created on the spot.
+
 ## Behaviour is a different interview
 
 Capability specs are not decisions and the questions are not the same. For behaviour, ask what the
@@ -82,6 +89,12 @@ Pick the type from what the thing is:
   a plain per-case yes or no → `quality`, linked to it with `qualifies` Say how it is verified: a target checked outside the repo (a nightly load test in CI, an SLO, a
   manual review) goes on a `VERIFIED-IN pre-release|production|manual — <where>` line, declared as
   intent even before that test exists; something rerunnable with the same result each time is a check.
+
+**Before writing, check `openrecord verification <key>`** — the spec type and aspect for a functional
+spec (`flow/main-flow`, `lifecycle/transitions`...), or the attribute for a `quality` spec (`latency`,
+`accessibility`...). It says what the record needs to contain to be verifiable, and where that kind of
+claim typically lands. Suggest a verification approach if the person hasn't named one, but never pick a
+tool for them and never create a `checks.json` entry — that registry is a separate, later decision.
 
 ### Actors come before the flows that need them
 
