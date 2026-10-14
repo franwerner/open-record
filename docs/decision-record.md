@@ -379,6 +379,110 @@ the tool's own entry names the decision instead. See [cli.md](cli.md#check) for 
   remove`. Nothing in this binary shells out to run a check's command; which checks actually run, and
   when, stays the implementing flow's or the project's own CI's job, never this format's.
 
+## Verifying a record: `@record:<path>[#<anchor>]` {#annotations}
+
+Task 09's table left one row open: *"which rule or test covers one record"*, carried by *"the code
+itself (a later task)"*. Task 10 fills it in — the last of three ways a record relates to code, and
+the only one that is never written in the store at all:
+
+| Relation | How it is established |
+| --- | --- |
+| Record → code that **governs** | The component a spec declares, via `components.json` (already existed) |
+| Record → the tool that **enforces** it | `checks.json`'s `justified-by`/`enforces` (task 09) |
+| Record → code that **verifies** it | `@record:` annotations, found by scanning the repository's text |
+
+**It is not a mapping from a record to a file.** A test, a linter rule, a configuration file or a
+script carries the annotation to say *this is what I try to verify* — never the other way around, and
+never production code: a handler or a repository carries no annotation, because nothing about it
+executes a check.
+
+### Syntax
+
+```
+@record:<path>[#<anchor>]
+```
+
+`<path>` is the record's path inside the store (`specs/flow/upload-file.md`,
+`decisions/api/structure/layers.md`). `<anchor>`, when present, is exactly a [capability
+spec's](capability-spec.md#anchors) anchor — the same slug rule, the same one namespace per record,
+nothing special-cased for this convention. It shares the `@type:value` mention vocabulary
+[`@actor:<id>`](#actors) already uses, with `record` in place of `actor`.
+
+```go
+// @record:specs/flow/upload-file.md#file-too-large
+func TestUpload_RejectsLargeFiles(t *testing.T) { ... }
+```
+
+```yaml
+# @record:decisions/api/structure/layers.md
+deps:
+  domain:
+    mayDependOn: []
+```
+
+**`<anchor>` is optional, on every record kind.** A decision and a `rule` spec have no anchors at all
+(see ["No internal anchors"](#no-internal-anchors) above and
+[capability-spec.md](capability-spec.md#anchors)), so an annotation naming either is always whole-file,
+with no `#`. A `flow`, `process`, `lifecycle` or `quality` spec *does* have anchors, and an annotation
+naming one of those may still omit `#anchor` — it then covers the whole record rather than one
+particular scenario or transition, the same allowance a decision gets by having no anchor to pick from
+in the first place.
+
+**It works inside any comment syntax**, because the binary never parses which syntax a file uses: it
+scans every file's text for the literal marker `@record:` and reads from there onward. What precedes it
+on the line — `//`, `#`, `--`, `/*`, or nothing at all — is irrelevant. Two `#` can sit on one line
+(`# @record:specs/flow/x.md#file-too-large`): the first is the language's own comment marker (YAML,
+Python, a shell script), the second separates the path from the anchor, and the binary only cares about
+the second. Inside a configuration file, the annotation goes above the one rule it is about when
+different rules enforce different decisions, or once at the top when the whole file enforces one.
+
+### Scope: which files are scanned
+
+The scan covers every file `git ls-files --cached --others --exclude-standard` reports when the
+repository is a git one — tracked files, plus new ones not yet staged, minus whatever `.gitignore`
+already excludes — because a file git itself does not track carries no history and can vanish without
+anyone the tool can warn. Outside a git repository (or when `git` itself is unavailable), a plain
+filesystem walk is used instead, skipping `.git/`, `node_modules/` and `vendor/` by name.
+
+Two exclusions apply either way: nothing under `.openrecord/` — it is versioned so git does not drop
+it, but an annotation does not live inside the store it points at — and no `*.md` file, since this very
+document's own examples are markdown and are not real annotations, and a record's own prose is never
+where its verification lives. A binary file and a file above a size cap are both skipped silently:
+neither can carry a meaningful text annotation.
+
+### What is validated
+
+| Situation | Code |
+| --- | --- |
+| `@record:<path>` does not name a record in the store | `annotation-record-not-found` |
+| `@record:<path>#<anchor>` names a record, but it has no such anchor | `annotation-anchor-not-found` |
+
+Both are errors, reported by `validate` at the annotation's own `file:line`, never at the record it
+names — the annotating file is what has to be fixed. A plain `validate` (no `--for`) reports every
+broken annotation in the repository; `validate --for <coordinate>` reports only the ones whose target
+falls inside that coordinate, because an annotation lives outside the store coordinate `--for` walks and
+has no other way to be scoped against it.
+
+**A scenario with no annotation naming it at all is never an error.** It is pending work, surfaced by
+`impact` (issue 12) and `plan` (issue 13) once they exist, never something `validate` blocks on — a
+record can be perfectly well-formed and completely unverified at the same time, and those are different
+facts. Two scenarios of the same spec producing the same anchor is already `duplicate-anchor` (see
+["Anchors"](capability-spec.md#anchors)); it is not repeated as its own annotation code, because it
+would already break the cross before any annotation is even looked at.
+
+### Why a comment, and not something else
+
+| Option | Against it |
+| --- | --- |
+| **A comment** (chosen) | Adds to the code something that is not code, but it is explicit and lives in the test |
+| A naming convention (`TestUploadFile_FileTooLarge`) | Just as dependent on the target, and more fragile: renaming the test silently breaks the link, with nothing to detect it |
+| Executable specs (Gherkin-style) | Heavier: the spec itself would have to be parseable as a test |
+| No link at all, audited by an agent | Not deterministic — coverage, "what breaks if I delete this test", and a plan's definition of done all collapse |
+
+The comment is a rule of the implementing flow (issue 18), not human discipline: whoever writes the
+test writes the annotation. It states what the test **intends** to cover; whether it actually does is
+judgement, for review, never for this convention.
+
 ## Body
 
 Four sections, and nothing else.

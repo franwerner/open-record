@@ -91,6 +91,8 @@ const (
 	CodeCheckEnforcesNotFound       = "check-enforces-not-found"
 	CodeCheckEnforcesEmptyGroup     = "check-enforces-empty-group"
 	CodeCheckConfigNotFound         = "check-config-not-found"
+	CodeAnnotationRecordNotFound    = "annotation-record-not-found"
+	CodeAnnotationAnchorNotFound    = "annotation-anchor-not-found"
 )
 
 // Finding is one thing wrong with one file.

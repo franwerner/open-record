@@ -165,6 +165,12 @@ statistical in `checks.json` — a `pre-release`, `production` or `manual` verif
 person has to look at, stays out of the registry and is said in the record's own prose or `VERIFIED-IN`
 line instead.
 
+**A test, rule, config or script that verifies a record names it in a comment:**
+`@record:<path>#<anchor>` for one scenario or transition, `@record:<path>` for a whole rule spec or
+decision. Take the anchor from openrecord — the `anchors` a write or edit reports, or the spec itself —
+never from a guess at the slug; `openrecord validate` reports one that points nowhere. Annotate only the
+piece that verifies; production code never carries one.
+
 ## Writing
 
 If the level does not exist yet:

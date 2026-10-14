@@ -604,6 +604,14 @@ not part of the coordinate this walk covers by default, so an old or corrupt run
 `hash` (see [decision-record.md](decision-record.md#hash)), just through the execution's own commands
 rather than through `validate`.
 
+Every run also scans the repository's text for `@record:<path>[#<anchor>]` annotations (task 10 — see
+[decision-record.md](decision-record.md#annotations) for the full convention) and reports the broken
+ones: a path that does not name a record, or an anchor the target record does not have. An annotation
+lives outside the store coordinate this walk covers, so it is scoped differently from everything else
+here — a plain `validate` reports every broken annotation in the repository, while `validate --for
+decisions/api` reports only the ones whose target falls inside `decisions/api`. A scenario with no
+annotation naming it at all is never reported: that is pending work, not breakage.
+
 ### Findings are classified
 
 Every finding carries a **stable code**, and the severity is one more field rather than the axis. The
@@ -684,6 +692,8 @@ disappeared).
 | `check-config-not-found` | error | A `config` file that does not exist in the repository. |
 | `checks-undeclared` | error | Something needs a check and `checks.json` does not exist yet. |
 | `checks-unreadable` | error | `checks.json` exists but cannot be parsed. |
+| `annotation-record-not-found` | error | An `@record:<path>` annotation (task 10) names a path that is not a record in the store. |
+| `annotation-anchor-not-found` | error | An `@record:<path>#<anchor>` annotation names an anchor the target record does not have. |
 
 ### Exit code
 

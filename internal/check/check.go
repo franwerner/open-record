@@ -139,6 +139,13 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 	}
 
 	findings = append(findings, flatConcerns(files)...)
+
+	annotationFindings, err := CheckAnnotations(repo, coordinate)
+	if err != nil {
+		return nil, err
+	}
+	findings = append(findings, annotationFindings...)
+
 	return Sorted(findings), nil
 }
 
