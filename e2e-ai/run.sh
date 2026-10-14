@@ -145,24 +145,27 @@ echo "    $num_prompts prompt(s), $num_checks check(s)"
 
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$scenario_name"
 rundir="$ORLAB_HOME/runs/$run_id"
+# The project under test lives in its own subdirectory, and everything the
+# runner keeps (transcripts, snapshots, checks, judge input) stays beside it,
+# never inside it: the binary scans the project's files for @record:
+# annotations, so a transcript quoting an example would read as the project's.
+projdir="$rundir/project"
 artifacts_dir="$REPO/e2e-ai/.runs/$run_id"
 echo "==> run id: $run_id"
-sudo -n -u "$LAB_USER" mkdir -p "$rundir"
+sudo -n -u "$LAB_USER" mkdir -p "$projdir"
 mkdir -p "$artifacts_dir"
 
 echo "==> lab precondition"
 sudo -n -u "$LAB_USER" tee "$rundir/.setup.sh" >/dev/null < "$work/setup.sh"
-sudo -n -iu "$LAB_USER" bash -lc "cd '$rundir' && set -euo pipefail && bash '$rundir/.setup.sh'"
+sudo -n -iu "$LAB_USER" bash -lc "cd '$projdir' && set -euo pipefail && bash '$rundir/.setup.sh'"
 
 echo "==> openrecord skills --emit"
-sudo -n -iu "$LAB_USER" bash -lc "cd '$rundir' && mkdir -p .claude/skills && openrecord skills --emit .claude/skills/"
-
-EXCLUDES=(--exclude snapshots --exclude checks --exclude 'prompt-*' --exclude '.setup.sh' --exclude '.checks-env.sh' --exclude 'judge*' --exclude 'transcript.ndjson' --exclude 'judged.txt' --exclude 'failure_signals.txt' --exclude 'checks_meta.tsv' --exclude 'check_results.tsv')
+sudo -n -iu "$LAB_USER" bash -lc "cd '$projdir' && mkdir -p .claude/skills && openrecord skills --emit .claude/skills/"
 
 snapshot() {
   local n="$1"
   sudo -n -u "$LAB_USER" mkdir -p "$rundir/snapshots/$n"
-  sudo -n -u "$LAB_USER" rsync -a "${EXCLUDES[@]}" "$rundir/" "$rundir/snapshots/$n/"
+  sudo -n -u "$LAB_USER" rsync -a "$projdir/" "$rundir/snapshots/$n/"
 }
 
 echo "==> snapshot 0 (before any prompt)"
@@ -196,7 +199,7 @@ for i in $(seq 1 "$num_prompts"); do
   stream_out="$rundir/prompt-$i.stream.json"
   stderr_out="$rundir/prompt-$i.stderr.log"
 
-  if ! sudo -n -iu "$LAB_USER" bash -lc "cd '$rundir' && claude $quoted > '$stream_out' 2> '$stderr_out'" < "$work/prompts/$i.txt"; then
+  if ! sudo -n -iu "$LAB_USER" bash -lc "cd '$projdir' && claude $quoted > '$stream_out' 2> '$stderr_out'" < "$work/prompts/$i.txt"; then
     echo "error: claude invocation failed for prompt $i (environment/sudo failure, not a model result) — see $stderr_out" >&2
     sudo -n -u "$LAB_USER" cat "$stderr_out" >&2 || true
     exit 1
@@ -285,7 +288,7 @@ while IFS=$'\t' read -r filename cid desc; do
   [ -n "$filename" ] || continue
   sudo -n -u "$LAB_USER" tee "$rundir/checks/$filename" >/dev/null < "$work/checks/$filename"
   echo "    $cid: $desc"
-  if sudo -n -iu "$LAB_USER" bash -lc "cd '$rundir' && set -a && . '$rundir/.checks-env.sh' && set +a && bash '$rundir/checks/$filename'" \
+  if sudo -n -iu "$LAB_USER" bash -lc "cd '$projdir' && set -a && . '$rundir/.checks-env.sh' && set +a && bash '$rundir/checks/$filename'" \
       > "$artifacts_dir/check-$cid.stdout.log" 2> "$artifacts_dir/check-$cid.stderr.log"; then
     echo "        PASS"
     printf '%s\tPASS\t%s\n' "$cid" "$desc" >> "$work/check_results.tsv"
