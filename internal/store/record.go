@@ -33,6 +33,8 @@ const (
 	FieldStatus      = "status"
 	FieldComponents  = "components"
 	FieldQualifies   = "qualifies"
+	FieldServes      = "serves"
+	FieldDependsOn   = "depends-on"
 	FieldBodyHash    = "body-hash"
 )
 
@@ -61,6 +63,13 @@ type Record struct {
 	// one or more functional specs (or their anchors) it characterizes. Absent
 	// on every other kind of record.
 	Qualifies []string
+	// Serves is a decision's optional link to the spec(s), functional or
+	// quality, it exists because of. Absent on every spec.
+	Serves []string
+	// DependsOn is a decision's optional link to the other decision(s) that
+	// have to stay accepted for this one to still make sense. Absent on every
+	// spec.
+	DependsOn []string
 	// BodyHash is the stamped SHA-256 of the body, carried verbatim. Empty when
 	// the field was absent or outside its domain — both already reported.
 	BodyHash string
@@ -193,9 +202,32 @@ func ParseRecord(raw []byte, kind Kind, path string) (Record, []finding.Finding)
 					"qualifies must be a list of spec paths, each optionally followed by #anchor").At(path))
 			}
 		}
-	} else if document.Has(FieldComponents) {
-		findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
-			"a decision does not declare components — it is closed by the one it is filed under").At(path))
+		if document.Has(FieldServes) || document.Has(FieldDependsOn) {
+			findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+				"a spec does not declare serves or depends-on — only a decision links to another record that way").At(path))
+		}
+	} else {
+		if document.Has(FieldComponents) {
+			findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+				"a decision does not declare components — it is closed by the one it is filed under").At(path))
+		}
+		known = append(known, FieldServes, FieldDependsOn)
+		if document.Has(FieldServes) {
+			if list, ok := document.Strings(FieldServes); ok {
+				record.Serves = list
+			} else {
+				findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+					"serves must be a list of spec paths").At(path))
+			}
+		}
+		if document.Has(FieldDependsOn) {
+			if list, ok := document.Strings(FieldDependsOn); ok {
+				record.DependsOn = list
+			} else {
+				findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+					"depends-on must be a list of decision paths").At(path))
+			}
+		}
 	}
 
 	if unknown := document.Unknown(known...); len(unknown) > 0 {
@@ -224,6 +256,13 @@ func RenderRecord(record Record, kind Kind) []byte {
 		fields = append(fields, frontmatter.List(FieldComponents, record.Components))
 		if len(record.Qualifies) > 0 {
 			fields = append(fields, frontmatter.List(FieldQualifies, record.Qualifies))
+		}
+	} else {
+		if len(record.Serves) > 0 {
+			fields = append(fields, frontmatter.List(FieldServes, record.Serves))
+		}
+		if len(record.DependsOn) > 0 {
+			fields = append(fields, frontmatter.List(FieldDependsOn, record.DependsOn))
 		}
 	}
 	fields = append(fields, frontmatter.Text(FieldBodyHash, record.BodyHash))

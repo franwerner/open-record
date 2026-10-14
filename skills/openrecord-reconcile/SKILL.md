@@ -113,7 +113,16 @@ the anchor's own component plus whatever the declared crossing named is a reason
 plainly in the report: a narrowed scope is a weaker coverage claim, and a reader relying on this check
 needs to know which one they got.
 
-Together, these three return five to fifteen records, not two hundred. That bound is the whole
+**4. Declared relations — `serves` and `depends-on`.** When the anchor is a decision, its own
+frontmatter may already name the exact neighbours worth checking, with no search needed: every spec it
+`serves`, every decision it `depends-on`, and — read from the write/edit reply, not written anywhere —
+every decision in its `dependents`. These are the cheapest, most precise source there is, because they
+were validated by the binary rather than surfaced by wording or proximity. A `depends-on` pair is also
+the one place "broken dependency" (below) is handed to you directly: if the anchor's own status or
+substance just changed, everything in its `dependents` is a candidate worth a look, not just a
+possibility search might turn up.
+
+Together, these four return five to fifteen records, not two hundred. That bound is the whole
 reason this skill is runnable at all — a person can read fifteen records against one anchor in one
 sitting, and nobody can read two hundred against two hundred.
 

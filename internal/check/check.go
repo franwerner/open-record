@@ -47,6 +47,8 @@ func Record(raw []byte, coordinate store.Coordinate, declared store.Components, 
 	}
 	findings = append(findings, Body(record.Body, coordinate.Kind, specType, path)...)
 	findings = append(findings, checkQualifies(record, coordinate, repo, path)...)
+	findings = append(findings, checkServes(record, coordinate, repo, path)...)
+	findings = append(findings, checkDependsOn(record, coordinate, repo, path)...)
 	return findings
 }
 

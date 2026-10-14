@@ -131,6 +131,22 @@ body-hash: 50d858e0985ecc7f60418aaf0cc5ab587f42c2570a884095a9e8ccacd0f6545c
 ---
 ```
 
+A decision that exists because of a spec, or that only makes sense while another decision holds, adds
+one or both of `serves` and `depends-on` — see [Relations](#relations) below:
+
+```yaml
+---
+title: pgx as the database driver
+description: Database access uses pgx directly, without an ORM.
+status: accepted
+serves:
+  - specs/flow/upload-file.md
+depends-on:
+  - decisions/api/data/postgres.md
+body-hash: ...
+---
+```
+
 ### `title`
 
 The record's title. It lives here and **not** as an `# H1` in the body — one source, so the two can
@@ -245,17 +261,71 @@ tampered content.
 reads keep working against a `components.json` with a missing or mismatching hash: reading it does not
 launder a tamper the way writing over it would. Only `validate` and a writer refuse.
 
+### Relations: `serves` and `depends-on` {#relations}
+
+Two optional fields, both lists of **record paths**, both on a decision and never on a spec — a spec
+declaring either is an error. Each points at the whole file; neither ever carries a `#anchor`, because
+there is nothing narrower than a decision to point *at* either.
+
+```yaml
+serves:
+  - specs/flow/upload-file.md
+depends-on:
+  - decisions/api/data/postgres.md
+```
+
+A reference goes stale the moment its target is renamed or moved — the exact failure mode that kept
+relations out of the format originally (see "What is deliberately not here" below). What changed is that
+the binary now validates every reference on write and on every `validate`, so a stale one is reported,
+not silent. That is what makes these two links safe to add back, for exactly these two, and no others.
+
+**`serves`** names the spec, functional or quality, this decision exists because of. It is optional: a
+decision with no spec behind it (team knowledge, cost, a licence — nothing a user would notice) carries
+none, and in that case the why has to be developed in `## Context` instead.
+
+**`depends-on`** names another decision, with one strict meaning: **this decision only makes sense while
+that one stays `accepted`.** The test: if the other decision changed, would this one need
+re-evaluating? If the answer is no, it is not a `depends-on` — it is never a generic "related", and two
+decisions in the same component and concern are not linked this way just for being close together; the
+store's own structure and the neighbourhood (`map`) already surface that proximity.
+
+Both are read regardless of which component or concern the target lives in or the one carrying the
+field lives in — a decision in `api` can depend on one filed under `root`.
+
+**The inverse of each is computed, never written.** Asking "what depends on this?" or "what serves this
+spec?" by hand-maintaining the other side is exactly the staleness this section already rejected once.
+Instead, `record write` and `record edit` report it in their JSON reply: a decision's `dependents` —
+every other decision that depends on it, directly or transitively — and a spec's `served_by` — every
+decision whose `serves` names it. Neither blocks anything; both are informational, there for whoever
+just changed a decision to see what else has to be looked at again.
+
+**What is validated**, by `record write`, `record edit` and `validate` alike:
+
+| Situation | Code |
+| --- | --- |
+| `serves` names a record that does not exist | `serves-not-found` |
+| `serves` names something other than a spec | `serves-not-spec` |
+| `depends-on` names a record that does not exist | `depends-on-not-found` |
+| `depends-on` names something other than a decision | `depends-on-not-decision` |
+| `depends-on` names a decision that is `pending`, not `accepted` | `depends-on-pending` |
+| `depends-on` forms a cycle, direct or transitive | `depends-on-cycle` |
+
+A decision with no `serves` is never flagged by the binary — whether that is honest depends on whether
+`## Context` carries a real why, and that is a judgement for a person or a writing skill, not a
+mechanical check.
+
 ### What is deliberately not here
 
 - **`date`** — git knows when the file was created and last touched, and cannot drift. A hand-written
   date lies the moment someone edits without updating it. If *when* a decision was taken matters, that
   is context and belongs in the prose.
 - **`component`, `concern`** — carried by the path.
-- **relations (`related`, `supersedes`)** — a list of other records goes stale without anyone noticing,
-  and it is the one thing in a record that breaks when another one is renamed or moves down a level.
-  Where one record genuinely bears on another, the prose says so in words: nothing is written down that
-  has to be repaired later, and there are already two ways to reach a record — descend with `map`, or
-  find it with `grep`.
+- **a generic "related" link, or `supersedes`** — unlike `serves`/`depends-on` above, a bare "related"
+  carries no test for when it applies, so it gets used for everything and stops meaning anything; and
+  `supersedes` is unnecessary because you edit the record in place and git carries the history. Where
+  one record genuinely bears on another in a way that is not `serves` or `depends-on`, the prose says so
+  in words — there are already two ways to reach a record even without a written link: descend with
+  `map`, or find it with `grep`.
 
 ## Body
 

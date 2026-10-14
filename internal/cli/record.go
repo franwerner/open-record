@@ -19,16 +19,19 @@ import (
 type recordWriteOptions struct {
 	title, description, status, bodyFile *string
 	components, qualifies                *repeated
+	serves, dependsOn                    *repeated
 }
 
 func recordWriteFlags(flags *flag.FlagSet) *recordWriteOptions {
-	options := &recordWriteOptions{components: &repeated{}, qualifies: &repeated{}}
+	options := &recordWriteOptions{components: &repeated{}, qualifies: &repeated{}, serves: &repeated{}, dependsOn: &repeated{}}
 	options.title = flags.String("title", "", "the record's title")
 	options.description = flags.String("description", "", "the decision or behaviour in one line")
 	options.status = flags.String("status", string(store.Accepted), "accepted or pending")
 	options.bodyFile = flags.String("body-file", "", "file holding the body")
 	flags.Var(options.components, "components", "surfaces a spec reaches, repeatable — required for a spec")
 	flags.Var(options.qualifies, "qualifies", "a functional spec (or spec#anchor) this quality spec qualifies, repeatable — only on a quality spec")
+	flags.Var(options.serves, "serves", "a spec this decision exists because of, repeatable — only on a decision")
+	flags.Var(options.dependsOn, "depends-on", "a decision this one only makes sense while accepted, repeatable — only on a decision")
 	return options
 }
 
@@ -43,6 +46,8 @@ func runRecordWrite(env Env, args []string) error {
 	status, bodyFile := options.status, options.bodyFile
 	components := *options.components
 	qualifies := *options.qualifies
+	serves := *options.serves
+	dependsOn := *options.dependsOn
 	target, err := oneArgument("record write", subject, "a path inside the store")
 	if err != nil {
 		return err
@@ -84,6 +89,8 @@ func runRecordWrite(env Env, args []string) error {
 		Status:      store.Status(*status),
 		Components:  components,
 		Qualifies:   qualifies,
+		Serves:      serves,
+		DependsOn:   dependsOn,
 		Body:        string(body),
 	}
 	record.BodyHash = store.BodyHash(record.Body)
@@ -110,6 +117,13 @@ func runRecordWrite(env Env, args []string) error {
 		// field is omitted rather than reported empty, which would read as "this
 		// record has none" instead of "this kind of record never has any".
 		output["anchors"] = check.Anchors(record.Body)
+		// served_by is computed, never written, the same way anchors is derived
+		// from the body rather than stamped by hand — so it is reported on every
+		// spec, even one no decision serves yet, and omitted on a decision, which
+		// cannot be served at all.
+		output["served_by"] = check.ServedBy(env.Repo, relative)
+	} else {
+		output["dependents"] = check.Dependents(env.Repo, relative)
 	}
 	return env.WriteJSON(output)
 }
@@ -119,10 +133,11 @@ var sectionPattern = regexp.MustCompile(`(?m)^##\s+.+?\s*$`)
 type recordEditOptions struct {
 	section, bodyFile, title, description, status *string
 	components, qualifies                         *repeated
+	serves, dependsOn                             *repeated
 }
 
 func recordEditFlags(flags *flag.FlagSet) *recordEditOptions {
-	options := &recordEditOptions{components: &repeated{}, qualifies: &repeated{}}
+	options := &recordEditOptions{components: &repeated{}, qualifies: &repeated{}, serves: &repeated{}, dependsOn: &repeated{}}
 	options.section = flags.String("section", "", "the heading to replace, e.g. \"## Alternatives\"")
 	options.bodyFile = flags.String("body-file", "", "file holding the new section contents")
 	options.title = flags.String("title", "", "replace the title")
@@ -130,6 +145,8 @@ func recordEditFlags(flags *flag.FlagSet) *recordEditOptions {
 	options.status = flags.String("status", "", "replace the status")
 	flags.Var(options.components, "components", "replace the surfaces a spec reaches")
 	flags.Var(options.qualifies, "qualifies", "replace the functional spec(s) this quality spec qualifies")
+	flags.Var(options.serves, "serves", "replace the spec(s) this decision exists because of")
+	flags.Var(options.dependsOn, "depends-on", "replace the decision(s) this one depends on")
 	return options
 }
 
@@ -144,6 +161,8 @@ func runRecordEdit(env Env, args []string) error {
 	title, description, status := options.title, options.description, options.status
 	components := *options.components
 	qualifies := *options.qualifies
+	serves := *options.serves
+	dependsOn := *options.dependsOn
 	target, err := oneArgument("record edit", subject, "a path inside the store")
 	if err != nil {
 		return err
@@ -207,6 +226,12 @@ func runRecordEdit(env Env, args []string) error {
 	if len(qualifies) > 0 {
 		existing.Qualifies = qualifies
 	}
+	if len(serves) > 0 {
+		existing.Serves = serves
+	}
+	if len(dependsOn) > 0 {
+		existing.DependsOn = dependsOn
+	}
 
 	existing.BodyHash = store.BodyHash(existing.Body)
 	rendered := store.RenderRecord(existing, coordinate.Kind)
@@ -226,6 +251,9 @@ func runRecordEdit(env Env, args []string) error {
 	output := map[string]any{"edited": relative, "section": *section, "warnings": warningsOnly(found)}
 	if coordinate.Kind == store.Specs {
 		output["anchors"] = check.Anchors(existing.Body)
+		output["served_by"] = check.ServedBy(env.Repo, relative)
+	} else {
+		output["dependents"] = check.Dependents(env.Repo, relative)
 	}
 	return env.WriteJSON(output)
 }

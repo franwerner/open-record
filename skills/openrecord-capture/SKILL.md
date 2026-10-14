@@ -164,6 +164,27 @@ openrecord record edit specs/rule/usage-limits.md \
   --body-file ./new-rule.md
 ```
 
+A decision can also carry **`--serves`** (the spec, functional or quality, it exists because of) and
+**`--depends-on`** (another decision that has to stay `accepted` for this one to still make sense — the
+test: if that other decision changed, would this one need re-evaluating?). Both are optional, both take
+a whole record path, repeatable, and both are refused on a spec:
+
+```
+openrecord record write decisions/api/data/pgx-driver.md \
+  --title "pgx as the database driver" \
+  --description "Database access uses pgx directly, without an ORM." \
+  --status accepted \
+  --depends-on decisions/api/data/postgres.md \
+  --body-file ./body.md
+```
+
+**After writing or editing a decision, read `dependents` in the reply** — every decision that depends
+on it, directly or transitively, computed by the binary. After writing or editing a spec, read
+`served_by` the same way. Neither blocks anything and neither is yours to act on: tell the user what
+showed up and why it matters (*"pgx-driver depends on this; it's a Postgres driver, so switching
+databases probably affects it"*), and let them decide whether and how to follow up. Changing the
+dependent record yourself, even to a wording tweak, is not this skill's call to make.
+
 A spec also needs **`--components`**, which is mandatory and validated — one flag per surface,
 repeatable. A capability that declares none crosses with no path and drops out of every scope check
 silently, which is why it is refused rather than defaulted:

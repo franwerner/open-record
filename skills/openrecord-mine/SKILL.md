@@ -148,6 +148,18 @@ Quoting it is neither recovering the why from behaviour nor composing one. So:
 
 Where there is no such comment, the rule above is unchanged: say the reasoning is not recorded.
 
+## Relations are candidates too
+
+If the code shows a decision only making sense because of a spec, or only making sense while another
+mined-or-existing decision holds, say so as part of the candidate: a proposed `serves` or `depends-on`
+link, with the same evidence trail as everything else here. These are structural claims, not a why, so
+they do not carry the same invention risk as a rationale — but they still go through confirmation like
+every other part of the candidate, and `depends-on` still only applies under its strict test: would the
+dependent need re-evaluating if the other one changed?
+
+Once a candidate with a link is confirmed and written, read `dependents` (or `served_by`, for a spec)
+in the write's reply, and mention what it surfaces — it may point at something else worth mining next.
+
 ## Do not mine what is already there
 
 Check the store before proposing anything:

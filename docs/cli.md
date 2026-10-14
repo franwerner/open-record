@@ -293,6 +293,16 @@ same way `--components` is — against what already exists — with its own code
 itself a `quality` spec), and `qualifies-not-quality` (`--qualifies` was used on a spec that is not
 `quality`).
 
+**`--serves`** and **`--depends-on`**, both repeatable, are a decision's only two frontmatter flags —
+each a whole record path, never `#anchor` — and refused on a spec. `--serves` names the spec, functional
+or quality, this decision exists because of; `--depends-on` names another decision this one only makes
+sense while that one stays `accepted`. Both are validated against the store, with their own codes:
+`serves-not-found` / `depends-on-not-found` (the target does not exist), `serves-not-spec` (the target is
+not a spec), `depends-on-not-decision` (the target is not a decision), `depends-on-pending` (the target
+decision is `pending`), and `depends-on-cycle` (following `depends-on` edges from this record leads back
+to it, directly or through others). See
+[decision-record.md](decision-record.md#relations) for what each field means.
+
 **If anything fails, nothing is written.** The command returns the same `code` and `severity` findings
 `validate` returns, so there is one vocabulary for what is wrong with a record regardless of when you
 find out.
@@ -318,6 +328,24 @@ every transition, in document order, as the slug a future reference uses (see
 A decision has no anchorable part, so the field is left out rather than reported empty — the two read
 differently: "this record has none" against "this kind of record never has any".
 
+**A successful write on a decision reports its `dependents` instead, and a successful write on a spec
+also reports its `served_by`** — the inverse of `depends-on` and `serves` respectively, computed fresh
+from the store rather than written anywhere, so it can never go stale:
+
+```json
+{
+  "written": "decisions/api/data/postgres.md",
+  "warnings": [],
+  "dependents": ["decisions/api/data/atlas-migrations.md", "decisions/api/data/pgx.md"]
+}
+```
+
+`dependents` lists every decision that depends on this one, directly or transitively; `served_by` lists
+every decision whose `serves` names this spec. Each is reported even when empty — the one that does not
+apply to the kind of record just written is left out instead, the same split `anchors` already follows.
+Neither blocks the write: they are informational, there so whoever just changed a decision can see what
+else may need a second look, never acted on automatically.
+
 ### `record edit`
 
 Replaces one section, addressed by its heading.
@@ -342,7 +370,8 @@ from a stale view of the file patches the wrong place, and the result can still 
 the sections are known and fixed, so the caller says what it means — *change the alternatives* —
 instead of translating that into coordinates that may have moved.
 
-Its successful reply carries `anchors` on a spec, exactly like `record write`.
+Its successful reply carries `anchors` and `served_by` on a spec, and `dependents` on a decision, exactly
+like `record write`.
 
 ---
 
@@ -406,6 +435,12 @@ disappeared).
 | `qualifies-anchor-not-found` | error | `qualifies` names an anchor that is not among the target spec's anchors. |
 | `qualifies-not-functional` | error | `qualifies` points at another `quality` spec instead of a functional one. |
 | `qualifies-not-quality` | error | `qualifies` is declared on a spec that is not `quality`. |
+| `serves-not-found` | error | `serves` names a record that does not exist. |
+| `serves-not-spec` | error | `serves` names something other than a spec. |
+| `depends-on-not-found` | error | `depends-on` names a record that does not exist. |
+| `depends-on-not-decision` | error | `depends-on` names something other than a decision. |
+| `depends-on-pending` | error | `depends-on` names a decision that is `pending`, not `accepted`. |
+| `depends-on-cycle` | error | Following `depends-on` edges from this record leads back to it, directly or through others. |
 | `invalid-frontmatter` | error | Frontmatter absent or malformed. |
 | `body-hash-missing` | error | A record's frontmatter has no `body-hash` field. |
 | `body-hash-mismatch` | error | A `body-hash` is well-formed but does not match the body — the body drifted outside the tool. |

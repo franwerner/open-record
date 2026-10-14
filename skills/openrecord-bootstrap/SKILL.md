@@ -110,6 +110,27 @@ openrecord record write decisions/api/security/rate-limiting.md \
 A decision's body is four sections and nothing else: `## Context`, `## Decision`, `## Alternatives`,
 `## Consequences`.
 
+While you have them, ask two more things about this decision. **Does it exist because of a spec** —
+a behaviour already written down, or about to be? If so, add `--serves specs/<type>/<name>.md`
+(repeatable; functional or quality, the whole file, no `#anchor`). **Does it only make sense while
+another decision stays accepted** — would it need re-evaluating if that other one changed? If so, add
+`--depends-on decisions/<component>/<concern>/<name>.md` (repeatable). Neither is required, and
+"related" on its own is not — two decisions in the same concern already sit near each other through the
+store's structure, and `depends-on` is reserved for the stricter claim above.
+
+```
+openrecord record write decisions/api/data/pgx-driver.md \
+  --title "pgx as the database driver" \
+  --description "Database access uses pgx directly, without an ORM." \
+  --status accepted \
+  --depends-on decisions/api/data/postgres.md \
+  --body-file ./body.md
+```
+
+**After writing it, read `dependents` in the reply** (or `served_by`, on a spec) — every decision that
+depends on this one, directly or transitively, computed by the binary. If anything shows up, tell the
+user: it is information for them to act on, not something this skill changes on its own.
+
 A spec is the same command with **`--components`**, which is mandatory and validated — a capability that
 declares no surface crosses with no path and drops out of every scope check silently:
 
