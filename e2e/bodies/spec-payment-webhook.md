@@ -1,11 +1,11 @@
 ## Purpose
 
-Keeps an order's state in step with what the payment provider actually did, including the cases where
-the provider changes its mind after the shopper has left.
+Keeps an order's state in step with what the @actor:payment-provider actually did, including the cases where
+the provider changes its mind after the @actor:shopper has left.
 
 ## Trigger
 
-The payment provider sends a webhook reporting that an authorisation was captured, failed, refunded or
+The @actor:payment-provider sends a webhook reporting that an authorisation was captured, failed, refunded or
 disputed.
 
 ## Main flow

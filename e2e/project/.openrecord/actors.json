@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "actors": [
+    {
+      "id": "payment-provider",
+      "kind": "external-system",
+      "description": "The payment gateway that authorises charges and reports what happened to them by webhook."
+    },
+    {
+      "id": "shopper",
+      "kind": "human",
+      "description": "A person buying from the shop, with a basket and a delivery address."
+    },
+    {
+      "id": "visitor",
+      "kind": "human",
+      "description": "A person with no account yet, found only by the email address they give."
+    }
+  ],
+  "hash": "b208bf407c18ad0c8b56d2336f531519f5401cc5dcf4f7c9576ee565a9659715"
+}

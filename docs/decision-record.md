@@ -314,6 +314,30 @@ A decision with no `serves` is never flagged by the binary — whether that is h
 `## Context` carries a real why, and that is a judgement for a person or a writing skill, not a
 mechanical check.
 
+### Mentioning an actor: `@actor:<id>` {#actors}
+
+A decision carries no `initiated-by` — nothing initiates a choice the team made, it is never started by
+anyone — but it may still **mention** an actor anywhere in its body, exactly like a capability spec:
+
+```markdown
+## Decision
+Permissions are checked in a middleware before every handler. @actor:administrator carries a role of
+its own; @actor:support can read but never change another user's data.
+```
+
+This is often where an actor matters most: `authorization`-shaped decisions are usually *about* who can
+do what, and naming the actor the same way a spec does lets a later reader (or `openrecord impact`, once
+it exists) answer "what decisions talk about this actor?" without reading every record in the store.
+
+`@actor:<id>` is validated the same way here as in a spec: an id `actors.json` does not declare is
+`actor-mention-unknown`, and an actor's id or alias written in the open without the mention syntax is
+the warning `unmarked-actor-mention`. See [cli.md](cli.md#actor) for the full convention, `actor
+add`/`actor edit`/`actor remove`, and the pattern that keeps an email address from ever matching.
+
+**If an actor is removed, every mention of it becomes an error at the next `validate`.** Better still,
+`actor remove` refuses to delete an actor still mentioned anywhere — in an `initiated-by` or in a bare
+`@actor:` — and lists where, the same principle `component remove` already follows for a component.
+
 ### What is deliberately not here
 
 - **`date`** — git knows when the file was created and last touched, and cannot drift. A hand-written

@@ -58,7 +58,7 @@ func TestServesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
 		raw := decisionRecord(t, []string{"specs/flow/upload-file.md"}, nil)
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md")); got[finding.CodeServesNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md")); got[finding.CodeServesNotFound] {
 			t.Errorf("a valid serves reference was rejected: %v", got)
 		}
 	})
@@ -66,7 +66,7 @@ func TestServesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 	t.Run("a nonexistent spec is rejected", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := decisionRecord(t, []string{"specs/flow/does-not-exist.md"}, nil)
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md")); !got[finding.CodeServesNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md")); !got[finding.CodeServesNotFound] {
 			t.Errorf("a nonexistent target spec was accepted: %v", got)
 		}
 	})
@@ -75,7 +75,7 @@ func TestServesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeDecision(t, repo, "decisions/api/data/postgres.md", "accepted")
 		raw := decisionRecord(t, []string{"decisions/api/data/postgres.md"}, nil)
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md")); !got[finding.CodeServesNotSpec] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md")); !got[finding.CodeServesNotSpec] {
 			t.Errorf("serves pointing at a decision was accepted: %v", got)
 		}
 	})
@@ -83,7 +83,7 @@ func TestServesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 	t.Run("no serves at all is accepted", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := decisionRecord(t, nil, nil)
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md")); got[finding.CodeServesNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md")); got[finding.CodeServesNotFound] {
 			t.Errorf("a decision with no serves at all was rejected: %v", got)
 		}
 	})
@@ -94,7 +94,7 @@ func TestServesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		specCoordinate := store.Coordinate{Kind: store.Specs, Segments: []string{"flow"}}
 		raw := []byte("---\ntitle: t\ndescription: d\nstatus: accepted\ncomponents: [api]\nserves: [specs/flow/upload-file.md]\nbody-hash: " +
 			store.BodyHash(flowBody) + "\n---\n\n" + flowBody)
-		if got := codes(Record(raw, specCoordinate, declared, repo, "specs/flow/other.md")); !got[finding.CodeInvalidFrontmatter] {
+		if got := codes(Record(raw, specCoordinate, declared, store.Actors{}, repo, "specs/flow/other.md")); !got[finding.CodeInvalidFrontmatter] {
 			t.Errorf("serves on a spec was accepted: %v", got)
 		}
 	})
@@ -108,7 +108,7 @@ func TestDependsOnResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeDecision(t, repo, "decisions/api/data/postgres.md", "accepted")
 		raw := decisionRecord(t, nil, []string{"decisions/api/data/postgres.md"})
-		got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md"))
+		got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md"))
 		if got[finding.CodeDependsOnNotFound] || got[finding.CodeDependsOnPending] || got[finding.CodeDependsOnNotDecision] {
 			t.Errorf("a valid depends-on reference was rejected: %v", got)
 		}
@@ -117,7 +117,7 @@ func TestDependsOnResolvesAgainstTheRepoOnDisk(t *testing.T) {
 	t.Run("depends-on a nonexistent decision is rejected", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := decisionRecord(t, nil, []string{"decisions/api/data/does-not-exist.md"})
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md")); !got[finding.CodeDependsOnNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md")); !got[finding.CodeDependsOnNotFound] {
 			t.Errorf("a nonexistent depends-on target was accepted: %v", got)
 		}
 	})
@@ -126,7 +126,7 @@ func TestDependsOnResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeDecision(t, repo, "decisions/api/data/postgres.md", "pending")
 		raw := decisionRecord(t, nil, []string{"decisions/api/data/postgres.md"})
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md")); !got[finding.CodeDependsOnPending] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md")); !got[finding.CodeDependsOnPending] {
 			t.Errorf("depends-on a pending decision was accepted: %v", got)
 		}
 	})
@@ -135,7 +135,7 @@ func TestDependsOnResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeSpec(t, repo, "specs/flow/upload-file.md", "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n")
 		raw := decisionRecord(t, nil, []string{"specs/flow/upload-file.md"})
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md")); !got[finding.CodeDependsOnNotDecision] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md")); !got[finding.CodeDependsOnNotDecision] {
 			t.Errorf("depends-on a spec was accepted: %v", got)
 		}
 	})
@@ -143,7 +143,7 @@ func TestDependsOnResolvesAgainstTheRepoOnDisk(t *testing.T) {
 	t.Run("no depends-on at all is accepted", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := decisionRecord(t, nil, nil)
-		got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/pgx.md"))
+		got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/pgx.md"))
 		if got[finding.CodeDependsOnNotFound] || got[finding.CodeDependsOnCycle] {
 			t.Errorf("a decision with no depends-on at all was rejected: %v", got)
 		}
@@ -156,7 +156,7 @@ func TestDependsOnResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
 		raw := []byte("---\ntitle: t\ndescription: d\nstatus: accepted\ncomponents: [api]\ndepends-on: [decisions/api/data/postgres.md]\nbody-hash: " +
 			store.BodyHash(body) + "\n---\n\n" + body)
-		if got := codes(Record(raw, specCoordinate, declared, repo, "specs/flow/other.md")); !got[finding.CodeInvalidFrontmatter] {
+		if got := codes(Record(raw, specCoordinate, declared, store.Actors{}, repo, "specs/flow/other.md")); !got[finding.CodeInvalidFrontmatter] {
 			t.Errorf("depends-on on a spec was accepted: %v", got)
 		}
 	})
@@ -171,7 +171,7 @@ func TestDependsOnCycleDetection(t *testing.T) {
 		// a already depends on b; writing b with depends-on a closes the cycle.
 		writeDecision(t, repo, "decisions/api/data/a.md", "accepted", "decisions/api/data/b.md")
 		raw := decisionRecord(t, nil, []string{"decisions/api/data/a.md"})
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/b.md")); !got[finding.CodeDependsOnCycle] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/b.md")); !got[finding.CodeDependsOnCycle] {
 			t.Errorf("a direct A<->B cycle was accepted: %v", got)
 		}
 	})
@@ -182,7 +182,7 @@ func TestDependsOnCycleDetection(t *testing.T) {
 		writeDecision(t, repo, "decisions/api/data/a.md", "accepted", "decisions/api/data/b.md")
 		writeDecision(t, repo, "decisions/api/data/b.md", "accepted", "decisions/api/data/c.md")
 		raw := decisionRecord(t, nil, []string{"decisions/api/data/a.md"})
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/c.md")); !got[finding.CodeDependsOnCycle] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/c.md")); !got[finding.CodeDependsOnCycle] {
 			t.Errorf("a transitive A->B->C->A cycle was accepted: %v", got)
 		}
 	})
@@ -192,7 +192,7 @@ func TestDependsOnCycleDetection(t *testing.T) {
 		writeDecision(t, repo, "decisions/api/data/a.md", "accepted")
 		writeDecision(t, repo, "decisions/api/data/b.md", "accepted", "decisions/api/data/a.md")
 		raw := decisionRecord(t, nil, []string{"decisions/api/data/b.md"})
-		if got := codes(Record(raw, coordinate, declared, repo, "decisions/api/data/c.md")); got[finding.CodeDependsOnCycle] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "decisions/api/data/c.md")); got[finding.CodeDependsOnCycle] {
 			t.Errorf("a plain chain with no cycle was rejected: %v", got)
 		}
 	})

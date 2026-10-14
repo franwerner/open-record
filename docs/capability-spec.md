@@ -156,6 +156,40 @@ qualifies: [specs/flow/upload-file.md#successful-upload]
   All four are errors: a `qualifies` link that resolves to nothing is not a record worth keeping until
   someone notices.
 
+### `initiated-by`
+
+**Required on `flow` and `process`, forbidden on every other type — and on a decision.** It names the
+actor(s), declared in `actors.json`, that start this spec from outside the system. The system itself is
+never an actor: it is who responds.
+
+```yaml
+initiated-by: [visitor, administrator]   # flow: a flow can have more than one actor starting it
+initiated-by: [payment-provider]         # process: an external system or time, never a human
+```
+
+- **A list**, because more than one actor can start the same flow — a visitor and an administrator both
+  uploading a file, for instance.
+- **`flow` only accepts a `human` actor.** `process` only accepts `external-system` or `time` — a
+  `## Trigger` keeps describing *what happened* in prose; `initiated-by` says only *who* (or what)
+  caused it.
+- **`lifecycle`, `rule` and `quality` never carry it.** A lifecycle's transitions are fired by the flows
+  that describe them, a rule holds for everyone, and a quality spec characterizes behaviour that already
+  has its own actor, if any.
+- **Validated**, the same way `components` is: `record write`, `record edit` and `validate` all check it.
+
+  | Situation | Code |
+  | --- | --- |
+  | A `flow` or a `process` with no `initiated-by` | `initiated-by-missing` |
+  | `initiated-by` declared on `lifecycle`, `rule`, `quality` or a decision | `initiated-by-forbidden` |
+  | The same actor listed twice | `initiated-by-duplicate` |
+  | An id not declared in `actors.json` | `initiated-by-unknown-actor` |
+  | An actor of the wrong class for the type (a non-`human` initiating a `flow`, a `human` initiating a `process`) | `initiated-by-wrong-kind` |
+  | An `initiated-by` actor never mentioned as `@actor:<id>` anywhere in the body | `initiated-by-not-mentioned` |
+
+See [cli.md](cli.md#actor) for `actor add`/`actor edit`/`actor remove` and the `@actor:<id>` mention
+convention, which every record — a spec of any type, or a decision — may use in its body regardless of
+whether it declares `initiated-by` at all.
+
 ## Body
 
 A small fixed core, plus the sections the type asks for. The type is what makes the format ask the

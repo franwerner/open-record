@@ -198,12 +198,13 @@ func TestRecordEditRejectsAnUnknownSection(t *testing.T) {
 func TestRecordEditRevalidatesTheWholeFile(t *testing.T) {
 	repo := declared(t)
 	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+	mustRun(t, repo, "actor", "add", "visitor", "--kind", "human", "--description", "d")
 
 	target := "specs/flow/signup.md"
-	body := "## Purpose\n\nx\n\n## Main flow\n\n1. one\n2. two\n\n## Branches\n\n- **[2] taken** → outcome\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	body := "## Purpose\n\n@actor:visitor does x\n\n## Main flow\n\n1. one\n2. two\n\n## Branches\n\n- **[2] taken** → outcome\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
 	mustRun(t, repo, "record", "write", target,
 		"--title", "t", "--description", "d", "--status", "accepted",
-		"--components", "api", "--body-file", bodyFile(t, body))
+		"--components", "api", "--initiated-by", "visitor", "--body-file", bodyFile(t, body))
 
 	// The new section is fine on its own; it breaks an anchor in a section it
 	// never touched.
@@ -223,11 +224,12 @@ func TestRecordEditRevalidatesTheWholeFile(t *testing.T) {
 func TestRecordWriteReturnsAnchorsForASpec(t *testing.T) {
 	repo := declared(t)
 	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+	mustRun(t, repo, "actor", "add", "visitor", "--kind", "human", "--description", "d")
 	target := "specs/flow/signup.md"
-	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	body := "## Purpose\n\n@actor:visitor does x\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
 	out := decode[map[string]any](t, mustRun(t, repo, "record", "write", target,
 		"--title", "t", "--description", "d", "--status", "accepted",
-		"--components", "api", "--body-file", bodyFile(t, body)))
+		"--components", "api", "--initiated-by", "visitor", "--body-file", bodyFile(t, body)))
 	anchors, ok := out["anchors"].([]any)
 	if !ok {
 		t.Fatalf("anchors is not a list: %v", out)
@@ -273,11 +275,12 @@ func TestRecordWriteRejectsTwoScenariosThatCollideOnTheSameAnchor(t *testing.T) 
 func TestRecordEditRejectsAnEditThatIntroducesADuplicateAnchor(t *testing.T) {
 	repo := declared(t)
 	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+	mustRun(t, repo, "actor", "add", "visitor", "--kind", "human", "--description", "d")
 	target := "specs/flow/signup.md"
-	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	body := "## Purpose\n\n@actor:visitor does x\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
 	mustRun(t, repo, "record", "write", target,
 		"--title", "t", "--description", "d", "--status", "accepted",
-		"--components", "api", "--body-file", bodyFile(t, body))
+		"--components", "api", "--initiated-by", "visitor", "--body-file", bodyFile(t, body))
 
 	colliding := "### Scenario: Happy path\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n\n" +
 		"### Scenario: happy, path!\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"

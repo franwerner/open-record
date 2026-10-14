@@ -80,7 +80,8 @@ judgement:
 │       ├── INDEX.md
 │       ├── <capability>.md
 │       └── [<subgroup>/]
-└── components.json             the declared surfaces, the format version, and an integrity hash
+├── components.json             the declared surfaces, the format version, and an integrity hash
+└── actors.json                 who can initiate a flow or a process, optional until something needs one
 ```
 
 Two rules generate most of this layout:

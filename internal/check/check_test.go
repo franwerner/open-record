@@ -148,7 +148,7 @@ func TestRecordChecksComponentsAgainstTheDeclaration(t *testing.T) {
 	}
 	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
 	raw := []byte("---\ntitle: x\ndescription: y\nstatus: accepted\ncomponents: [api, apis]\nbody-hash: " + store.BodyHash(body) + "\n---\n\n" + body)
-	if !codes(Record(raw, coordinate, declared, "", "specs/flow/x.md"))["undeclared-component"] {
+	if !codes(Record(raw, coordinate, declared, store.Actors{}, "", "specs/flow/x.md"))["undeclared-component"] {
 		t.Error("a typo in components was accepted; it would silently stop matching forever")
 	}
 }
@@ -174,7 +174,7 @@ func TestARecordCheckNeverReportsOnTheStore(t *testing.T) {
 		finding.CodeComponentDuplicate:   true,
 		finding.CodeComponentNoPaths:     true,
 	}
-	for _, item := range Record(raw, coordinate, declared, "", "decisions/api/security/x.md") {
+	for _, item := range Record(raw, coordinate, declared, store.Actors{}, "", "decisions/api/security/x.md") {
 		if storeWide[item.Code] {
 			t.Errorf("a record check reported %s, which is about the store, not this record", item.Code)
 		}
@@ -257,12 +257,12 @@ func TestBodyHashMismatchIsReportedOnlyWhenWellFormed(t *testing.T) {
 	body := "## Context\n\nx\n\n## Decision\n\nx\n\n## Alternatives\n\nx\n\n## Consequences\n\nx\n"
 
 	drifted := []byte("---\ntitle: t\ndescription: d\nstatus: accepted\nbody-hash: " + store.BodyHash("something else\n") + "\n---\n\n" + body)
-	if !codes(Record(drifted, coordinate, declared, "", "x.md"))["body-hash-mismatch"] {
+	if !codes(Record(drifted, coordinate, declared, store.Actors{}, "", "x.md"))["body-hash-mismatch"] {
 		t.Error("a well-formed hash disagreeing with the body was not reported")
 	}
 
 	noHash := []byte("---\ntitle: t\ndescription: d\nstatus: accepted\n---\n\n" + body)
-	found := codes(Record(noHash, coordinate, declared, "", "x.md"))
+	found := codes(Record(noHash, coordinate, declared, store.Actors{}, "", "x.md"))
 	if found["body-hash-mismatch"] {
 		t.Error("an empty body-hash (already reported as missing) also raised a mismatch")
 	}

@@ -134,7 +134,7 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
 		raw := qualityRecord(t, "specs/flow/upload-file.md")
-		if got := codes(Record(raw, coordinate, declared, repo, "specs/quality/upload.md")); got[finding.CodeQualifiesNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "specs/quality/upload.md")); got[finding.CodeQualifiesNotFound] {
 			t.Errorf("a valid whole-file reference was rejected: %v", got)
 		}
 	})
@@ -143,7 +143,7 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
 		raw := qualityRecord(t, "specs/flow/upload-file.md#upload-succeeds")
-		if got := codes(Record(raw, coordinate, declared, repo, "specs/quality/upload.md")); got[finding.CodeQualifiesAnchorNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "specs/quality/upload.md")); got[finding.CodeQualifiesAnchorNotFound] {
 			t.Errorf("a valid anchored reference was rejected: %v", got)
 		}
 	})
@@ -151,7 +151,7 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 	t.Run("a nonexistent spec is rejected", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := qualityRecord(t, "specs/flow/does-not-exist.md")
-		if got := codes(Record(raw, coordinate, declared, repo, "specs/quality/upload.md")); !got[finding.CodeQualifiesNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "specs/quality/upload.md")); !got[finding.CodeQualifiesNotFound] {
 			t.Errorf("a nonexistent target spec was accepted: %v", got)
 		}
 	})
@@ -160,7 +160,7 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
 		raw := qualityRecord(t, "specs/flow/upload-file.md#no-such-scenario")
-		if got := codes(Record(raw, coordinate, declared, repo, "specs/quality/upload.md")); !got[finding.CodeQualifiesAnchorNotFound] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "specs/quality/upload.md")); !got[finding.CodeQualifiesAnchorNotFound] {
 			t.Errorf("a nonexistent anchor was accepted: %v", got)
 		}
 	})
@@ -169,7 +169,7 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		repo := t.TempDir()
 		writeSpec(t, repo, "specs/quality/other.md", qualityScenario("manual — someone checked"))
 		raw := qualityRecord(t, "specs/quality/other.md")
-		if got := codes(Record(raw, coordinate, declared, repo, "specs/quality/upload.md")); !got[finding.CodeQualifiesNotFunctional] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "specs/quality/upload.md")); !got[finding.CodeQualifiesNotFunctional] {
 			t.Errorf("a quality-to-quality reference was accepted: %v", got)
 		}
 	})
@@ -180,7 +180,7 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		flowCoordinate := store.Coordinate{Kind: store.Specs, Segments: []string{"flow"}}
 		raw := []byte("---\ntitle: t\ndescription: d\nstatus: accepted\ncomponents: [api]\nqualifies: [specs/flow/upload-file.md]\nbody-hash: " +
 			store.BodyHash(flowBody) + "\n---\n\n" + flowBody)
-		if got := codes(Record(raw, flowCoordinate, declared, repo, "specs/flow/other.md")); !got[finding.CodeQualifiesNotQuality] {
+		if got := codes(Record(raw, flowCoordinate, declared, store.Actors{}, repo, "specs/flow/other.md")); !got[finding.CodeQualifiesNotQuality] {
 			t.Errorf("qualifies on a flow spec was accepted: %v", got)
 		}
 	})
@@ -188,7 +188,7 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 	t.Run("no qualifies at all is accepted", func(t *testing.T) {
 		repo := t.TempDir()
 		raw := qualityRecord(t)
-		if got := codes(Record(raw, coordinate, declared, repo, "specs/quality/upload.md")); got[finding.CodeQualifiesNotFound] || got[finding.CodeQualifiesNotFunctional] {
+		if got := codes(Record(raw, coordinate, declared, store.Actors{}, repo, "specs/quality/upload.md")); got[finding.CodeQualifiesNotFound] || got[finding.CodeQualifiesNotFunctional] {
 			t.Errorf("a quality spec with no qualifies at all was rejected: %v", got)
 		}
 	})

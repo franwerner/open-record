@@ -32,7 +32,7 @@ func TestLifecycleDiagramIsValidMermaid(t *testing.T) {
 	}
 	// A transition label runs to the end of the line, so quoting it puts the
 	// quotes in the label a reader sees.
-	if !strings.Contains(out, "awaiting_payment --> paid: the payment provider confirms the authorisation") {
+	if !strings.Contains(out, "awaiting_payment --> paid: the @actor:payment-provider confirms the authorisation") {
 		t.Errorf("the transition label is quoted or missing:\n%s", out)
 	}
 	// A single-word state is its own identifier and gets no alias line.
@@ -57,7 +57,7 @@ func TestFlowDiagramKeepsWrappedProse(t *testing.T) {
 	for _, want := range []string{
 		"items, the total, and where it will be delivered",
 		"and any tax that the destination attracts",
-		"never an amount the shopper has not seen",
+		"never an amount the @actor:shopper has not seen",
 		"when asking about it later",
 		"delivery estimate",
 	} {

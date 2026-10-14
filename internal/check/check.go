@@ -20,7 +20,7 @@ const FlatConcern = 5
 // `quality` spec, its `qualifies` link against whatever else is already on
 // disk. repo is needed only for that last part: every other check here looks
 // at nothing but raw.
-func Record(raw []byte, coordinate store.Coordinate, declared store.Components, repo, path string) []finding.Finding {
+func Record(raw []byte, coordinate store.Coordinate, declared store.Components, actors store.Actors, repo, path string) []finding.Finding {
 	record, findings := store.ParseRecord(raw, coordinate.Kind, path)
 
 	if record.BodyHash != "" && store.BodyHash(record.Body) != record.BodyHash {
@@ -49,6 +49,8 @@ func Record(raw []byte, coordinate store.Coordinate, declared store.Components, 
 	findings = append(findings, checkQualifies(record, coordinate, repo, path)...)
 	findings = append(findings, checkServes(record, coordinate, repo, path)...)
 	findings = append(findings, checkDependsOn(record, coordinate, repo, path)...)
+	findings = append(findings, checkInitiatedBy(record, coordinate, actors, path)...)
+	findings = append(findings, checkActorMentions(record, actors, path)...)
 	return findings
 }
 
@@ -71,6 +73,23 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 		// components.json edited by hand to add a path can still be
 		// perfectly valid shape-wise.
 		findings = append(findings, store.VerifyComponents(repo, declared)...)
+	}
+
+	actors, err := store.LoadActors(repo)
+	if err != nil {
+		if !store.IsActorsUndeclared(err) {
+			if item, ok := err.(finding.Finding); ok {
+				findings = append(findings, item)
+			} else {
+				return nil, err
+			}
+		}
+		// An undeclared actors.json is benign on its own — see LoadActors —
+		// so nothing is reported here; a spec or decision that actually
+		// needs an actor reports its own finding below, through Record.
+	} else {
+		findings = append(findings, actors.Validate()...)
+		findings = append(findings, store.VerifyActors(repo, actors)...)
 	}
 
 	files, walkFindings, err := store.Walk(repo, coordinate)
@@ -97,7 +116,7 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 			findings = append(findings, finding.Errorf(finding.CodeInvalidCoordinate, "%v", parseErr).At(file.Path))
 			continue
 		}
-		findings = append(findings, Record(raw, recordCoordinate, declared, repo, file.Path)...)
+		findings = append(findings, Record(raw, recordCoordinate, declared, actors, repo, file.Path)...)
 	}
 
 	findings = append(findings, flatConcerns(files)...)

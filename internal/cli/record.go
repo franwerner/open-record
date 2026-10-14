@@ -19,17 +19,19 @@ import (
 type recordWriteOptions struct {
 	title, description, status, bodyFile *string
 	components, qualifies                *repeated
+	initiatedBy                          *repeated
 	serves, dependsOn                    *repeated
 }
 
 func recordWriteFlags(flags *flag.FlagSet) *recordWriteOptions {
-	options := &recordWriteOptions{components: &repeated{}, qualifies: &repeated{}, serves: &repeated{}, dependsOn: &repeated{}}
+	options := &recordWriteOptions{components: &repeated{}, qualifies: &repeated{}, initiatedBy: &repeated{}, serves: &repeated{}, dependsOn: &repeated{}}
 	options.title = flags.String("title", "", "the record's title")
 	options.description = flags.String("description", "", "the decision or behaviour in one line")
 	options.status = flags.String("status", string(store.Accepted), "accepted or pending")
 	options.bodyFile = flags.String("body-file", "", "file holding the body")
 	flags.Var(options.components, "components", "surfaces a spec reaches, repeatable — required for a spec")
 	flags.Var(options.qualifies, "qualifies", "a functional spec (or spec#anchor) this quality spec qualifies, repeatable — only on a quality spec")
+	flags.Var(options.initiatedBy, "initiated-by", "an actor id that starts this spec, repeatable — required on a flow or a process, forbidden otherwise")
 	flags.Var(options.serves, "serves", "a spec this decision exists because of, repeatable — only on a decision")
 	flags.Var(options.dependsOn, "depends-on", "a decision this one only makes sense while accepted, repeatable — only on a decision")
 	return options
@@ -46,6 +48,7 @@ func runRecordWrite(env Env, args []string) error {
 	status, bodyFile := options.status, options.bodyFile
 	components := *options.components
 	qualifies := *options.qualifies
+	initiatedBy := *options.initiatedBy
 	serves := *options.serves
 	dependsOn := *options.dependsOn
 	target, err := oneArgument("record write", subject, "a path inside the store")
@@ -89,6 +92,7 @@ func runRecordWrite(env Env, args []string) error {
 		Status:      store.Status(*status),
 		Components:  components,
 		Qualifies:   qualifies,
+		InitiatedBy: initiatedBy,
 		Serves:      serves,
 		DependsOn:   dependsOn,
 		Body:        string(body),
@@ -100,7 +104,11 @@ func runRecordWrite(env Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	findings := check.Sorted(check.Record(rendered, coordinate, declared, env.Repo, relative))
+	actors, err := loadActorsOrEmpty(env.Repo)
+	if err != nil {
+		return err
+	}
+	findings := check.Sorted(check.Record(rendered, coordinate, declared, actors, env.Repo, relative))
 	// Only an error stops the write. A warning is maintenance — a state with no
 	// way out, a level growing flat — and refusing to record something over one
 	// would make the store harder to keep than to abandon.
@@ -133,11 +141,12 @@ var sectionPattern = regexp.MustCompile(`(?m)^##\s+.+?\s*$`)
 type recordEditOptions struct {
 	section, bodyFile, title, description, status *string
 	components, qualifies                         *repeated
+	initiatedBy                                   *repeated
 	serves, dependsOn                             *repeated
 }
 
 func recordEditFlags(flags *flag.FlagSet) *recordEditOptions {
-	options := &recordEditOptions{components: &repeated{}, qualifies: &repeated{}, serves: &repeated{}, dependsOn: &repeated{}}
+	options := &recordEditOptions{components: &repeated{}, qualifies: &repeated{}, initiatedBy: &repeated{}, serves: &repeated{}, dependsOn: &repeated{}}
 	options.section = flags.String("section", "", "the heading to replace, e.g. \"## Alternatives\"")
 	options.bodyFile = flags.String("body-file", "", "file holding the new section contents")
 	options.title = flags.String("title", "", "replace the title")
@@ -145,6 +154,7 @@ func recordEditFlags(flags *flag.FlagSet) *recordEditOptions {
 	options.status = flags.String("status", "", "replace the status")
 	flags.Var(options.components, "components", "replace the surfaces a spec reaches")
 	flags.Var(options.qualifies, "qualifies", "replace the functional spec(s) this quality spec qualifies")
+	flags.Var(options.initiatedBy, "initiated-by", "replace the actor(s) that start this spec")
 	flags.Var(options.serves, "serves", "replace the spec(s) this decision exists because of")
 	flags.Var(options.dependsOn, "depends-on", "replace the decision(s) this one depends on")
 	return options
@@ -161,6 +171,7 @@ func runRecordEdit(env Env, args []string) error {
 	title, description, status := options.title, options.description, options.status
 	components := *options.components
 	qualifies := *options.qualifies
+	initiatedBy := *options.initiatedBy
 	serves := *options.serves
 	dependsOn := *options.dependsOn
 	target, err := oneArgument("record edit", subject, "a path inside the store")
@@ -226,6 +237,9 @@ func runRecordEdit(env Env, args []string) error {
 	if len(qualifies) > 0 {
 		existing.Qualifies = qualifies
 	}
+	if len(initiatedBy) > 0 {
+		existing.InitiatedBy = initiatedBy
+	}
 	if len(serves) > 0 {
 		existing.Serves = serves
 	}
@@ -239,9 +253,13 @@ func runRecordEdit(env Env, args []string) error {
 	if err != nil {
 		return err
 	}
+	actors, err := loadActorsOrEmpty(env.Repo)
+	if err != nil {
+		return err
+	}
 	// Revalidation is over the whole file: a new ## Branches can break an anchor
 	// against a ## Main flow it never touched.
-	found := check.Sorted(check.Record(rendered, coordinate, declared, env.Repo, relative))
+	found := check.Sorted(check.Record(rendered, coordinate, declared, actors, env.Repo, relative))
 	if finding.HasError(found) {
 		return writeRejected(env, "edited", relative, found)
 	}
@@ -335,6 +353,23 @@ func recordLocation(repo, target string) (store.Coordinate, string, error) {
 			"%s does not exist; create it with `openrecord level add %s`", coordinate, coordinate)
 	}
 	return coordinate, slug, nil
+}
+
+// loadActorsOrEmpty loads actors.json, treating an undeclared store as an
+// empty, trustworthy set rather than a failure: a store with no actors.json
+// yet is fine, right up until a spec that actually needs one reports its own
+// finding (an unknown initiated-by id, an unknown @actor: mention) pointing
+// at `actor add`. Any other failure — unreadable, tampered — is the
+// caller's to report.
+func loadActorsOrEmpty(repo string) (store.Actors, error) {
+	actors, err := store.LoadActors(repo)
+	if err != nil {
+		if store.IsActorsUndeclared(err) {
+			return store.Actors{}, nil
+		}
+		return store.Actors{}, err
+	}
+	return actors, nil
 }
 
 // warningsOnly keeps what did not stop the write, so a caller sees it without

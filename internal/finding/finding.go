@@ -68,6 +68,19 @@ const (
 	CodeSearchNotFound          = "search-not-found"
 	CodeRecordNotInSearch       = "record-not-in-search"
 	CodeRecordNotOpened         = "record-not-opened"
+	CodeActorsUndeclared        = "actors-undeclared"
+	CodeActorsUnreadable        = "actors-unreadable"
+	CodeActorDuplicate          = "actor-duplicate"
+	CodeActorAliasDuplicate     = "actor-alias-duplicate"
+	CodeActorInvalidKind        = "actor-invalid-kind"
+	CodeInitiatedByMissing      = "initiated-by-missing"
+	CodeInitiatedByForbidden    = "initiated-by-forbidden"
+	CodeInitiatedByDuplicate    = "initiated-by-duplicate"
+	CodeInitiatedByUnknownActor = "initiated-by-unknown-actor"
+	CodeInitiatedByWrongKind    = "initiated-by-wrong-kind"
+	CodeInitiatedByNotMentioned = "initiated-by-not-mentioned"
+	CodeActorMentionUnknown     = "actor-mention-unknown"
+	CodeUnmarkedActorMention    = "unmarked-actor-mention"
 )
 
 // Finding is one thing wrong with one file.

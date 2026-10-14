@@ -33,6 +33,7 @@ const (
 	FieldStatus      = "status"
 	FieldComponents  = "components"
 	FieldQualifies   = "qualifies"
+	FieldInitiatedBy = "initiated-by"
 	FieldServes      = "serves"
 	FieldDependsOn   = "depends-on"
 	FieldBodyHash    = "body-hash"
@@ -63,6 +64,10 @@ type Record struct {
 	// one or more functional specs (or their anchors) it characterizes. Absent
 	// on every other kind of record.
 	Qualifies []string
+	// InitiatedBy names the actor(s) who start this spec from outside the
+	// system — mandatory on a flow or a process, forbidden on every other
+	// spec type and on a decision, which nothing initiates.
+	InitiatedBy []string
 	// Serves is a decision's optional link to the spec(s), functional or
 	// quality, it exists because of. Absent on every spec.
 	Serves []string
@@ -188,7 +193,7 @@ func ParseRecord(raw []byte, kind Kind, path string) (Record, []finding.Finding)
 
 	known := []string{FieldTitle, FieldDescription, FieldStatus, FieldBodyHash}
 	if kind == Specs {
-		known = append(known, FieldComponents, FieldQualifies)
+		known = append(known, FieldComponents, FieldQualifies, FieldInitiatedBy)
 		record.Components, _ = document.Strings(FieldComponents)
 		if len(record.Components) == 0 {
 			findings = append(findings, finding.Errorf(finding.CodeEmptyComponents,
@@ -202,6 +207,14 @@ func ParseRecord(raw []byte, kind Kind, path string) (Record, []finding.Finding)
 					"qualifies must be a list of spec paths, each optionally followed by #anchor").At(path))
 			}
 		}
+		if document.Has(FieldInitiatedBy) {
+			if list, ok := document.Strings(FieldInitiatedBy); ok {
+				record.InitiatedBy = list
+			} else {
+				findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+					"initiated-by must be a list of actor ids").At(path))
+			}
+		}
 		if document.Has(FieldServes) || document.Has(FieldDependsOn) {
 			findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
 				"a spec does not declare serves or depends-on — only a decision links to another record that way").At(path))
@@ -210,6 +223,10 @@ func ParseRecord(raw []byte, kind Kind, path string) (Record, []finding.Finding)
 		if document.Has(FieldComponents) {
 			findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
 				"a decision does not declare components — it is closed by the one it is filed under").At(path))
+		}
+		if document.Has(FieldInitiatedBy) {
+			findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+				"a decision does not declare initiated-by — nothing initiates a choice the team made").At(path))
 		}
 		known = append(known, FieldServes, FieldDependsOn)
 		if document.Has(FieldServes) {
@@ -256,6 +273,9 @@ func RenderRecord(record Record, kind Kind) []byte {
 		fields = append(fields, frontmatter.List(FieldComponents, record.Components))
 		if len(record.Qualifies) > 0 {
 			fields = append(fields, frontmatter.List(FieldQualifies, record.Qualifies))
+		}
+		if len(record.InitiatedBy) > 0 {
+			fields = append(fields, frontmatter.List(FieldInitiatedBy, record.InitiatedBy))
 		}
 	} else {
 		if len(record.Serves) > 0 {

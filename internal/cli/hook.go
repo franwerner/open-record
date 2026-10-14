@@ -172,6 +172,9 @@ func decideWritePath(raw string) (bool, string) {
 	if rel == store.ComponentsFile {
 		return true, "`" + store.ComponentsFile + "` is written only by `openrecord component add` / `openrecord component remove`."
 	}
+	if rel == store.ActorsFile {
+		return true, "`" + store.ActorsFile + "` is written only by `openrecord actor add` / `openrecord actor edit` / `openrecord actor remove`."
+	}
 	if filepath.Base(rel) == store.IndexFile {
 		return true, "`" + store.IndexFile + "` is written only by `openrecord level add` (a component's own index comes from `openrecord component add`)."
 	}

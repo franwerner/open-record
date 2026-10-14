@@ -122,6 +122,12 @@ the one place "broken dependency" (below) is handed to you directly: if the anch
 substance just changed, everything in its `dependents` is a candidate worth a look, not just a
 possibility search might turn up.
 
+**A shared actor is another cheap, precise signal.** If the anchor's `initiated-by` names an actor, or
+its body mentions one with `@actor:<id>`, every other record mentioning that same id is worth a look —
+two records making different claims about what the same actor can do are exactly the kind of
+contradiction this skill exists to catch, and the mention is already validated, not a guess from
+wording.
+
 Together, these four return five to fifteen records, not two hundred. That bound is the whole
 reason this skill is runnable at all — a person can read fifteen records against one anchor in one
 sitting, and nobody can read two hundred against two hundred.

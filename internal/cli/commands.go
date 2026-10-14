@@ -37,6 +37,32 @@ var commands = []*Command{
 		},
 	},
 	{
+		Name:    "actor",
+		Summary: "Declare, edit and remove actors — who can initiate a flow or a process.",
+		Sub: []*Command{
+			{
+				Name:    "add",
+				Summary: "Declare an actor.",
+				Usage:   "openrecord actor add ID --kind human|external-system|time --description TEXT [--alias WORD]",
+				Flags:   describes(actorAddFlags),
+				Run:     runActorAdd,
+			},
+			{
+				Name:    "edit",
+				Summary: "Replace an actor's kind, description and/or aliases.",
+				Usage:   "openrecord actor edit ID [--kind KIND] [--description TEXT] [--alias WORD]",
+				Flags:   describes(actorEditFlags),
+				Run:     runActorEdit,
+			},
+			{
+				Name:    "remove",
+				Summary: "Remove an actor, when nothing references it.",
+				Usage:   "openrecord actor remove ID",
+				Run:     runActorRemove,
+			},
+		},
+	},
+	{
 		Name:    "level",
 		Summary: "Create a concern or subgroup with its index.",
 		Sub: []*Command{

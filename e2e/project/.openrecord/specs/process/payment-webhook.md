@@ -3,17 +3,18 @@ title: Payment webhook
 description: A signed provider event moves an order to match what the provider did; repeated deliveries are harmless, unsigned ones are refused, and an unreachable transition is left for a person.
 status: accepted
 components: [api]
-body-hash: 5eac2b4355c5b134496d2cb502d14108cf99eb405fb5ead11b0419bfb8ff80f5
+initiated-by: [payment-provider]
+body-hash: a18b1519af38d0a98707291d3314910d1e157e00547c37bf0f663314fd15b747
 ---
 
 ## Purpose
 
-Keeps an order's state in step with what the payment provider actually did, including the cases where
-the provider changes its mind after the shopper has left.
+Keeps an order's state in step with what the @actor:payment-provider actually did, including the cases where
+the provider changes its mind after the @actor:shopper has left.
 
 ## Trigger
 
-The payment provider sends a webhook reporting that an authorisation was captured, failed, refunded or
+The @actor:payment-provider sends a webhook reporting that an authorisation was captured, failed, refunded or
 disputed.
 
 ## Main flow

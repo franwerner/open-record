@@ -30,6 +30,7 @@ without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial re
 | --- | --- |
 | `map` | Navigate the store, one level at a time. |
 | `component` | Declare, remove and resolve components. |
+| `actor` | Declare, edit and remove actors — who can initiate a flow or a process. |
 | `level` | Create a concern or subgroup folder with its index. |
 | `record` | Write and edit records. |
 | `validate` | Check a coordinate is well-formed, recursively. |
@@ -225,6 +226,106 @@ outside every declared surface is exactly what a scope check needs to see.
 
 ---
 
+## `actor`
+
+The actor axis: who can start a `flow` or a `process` from outside the system, and who any record may
+mention in its text. The system itself is never an actor — it is who responds.
+
+**Declaring is never required on its own.** A store with no `actors.json` yet is a normal state. It
+only becomes a problem the moment a `flow` or a `process` needs to name who starts it, or a body
+mentions `@actor:` something that does not exist — both report the usual finding, naming `actor add`.
+
+### `actor add`
+
+```
+openrecord actor add administrator --kind human --description "Manages users and content." --alias admin
+```
+
+`--kind` is one of `human`, `external-system`, `time`, and `--description` is required — the same
+principle as a component's description: an actor nobody described does not tell a reader what fits it.
+`--alias`, repeatable, is optional: words prose tends to name this actor with, used only to drive the
+"unmarked mention?" warning below.
+
+Creates `actors.json` if it is absent, with the format version and the same integrity `hash`
+`components.json` carries (see [decision-record.md](decision-record.md#hash)); refuses instead of
+writing — file untouched — when an existing `actors.json` cannot be trusted, the same way
+`component add` refuses over a tampered `components.json`. Refused, too, when the id is already
+declared, or an alias collides with one already declared on a different actor.
+
+### `actor edit`
+
+```
+openrecord actor edit administrator --description "Manages users, content and billing." --alias admin
+```
+
+Replaces `--description` and/or the whole `--alias` list (passing `--alias` one or more times replaces
+every existing alias, never appends) — the id itself is immutable. `--kind` may also be changed, but is
+refused when the change would break a `flow` or a `process` that already names this actor in
+`initiated-by`: a `human` actor turning into an `external-system` would silently invalidate every flow
+that depends on being initiated by a person. The refusal lists exactly which file(s) would break, and
+changes nothing.
+
+### `actor remove`
+
+```
+openrecord actor remove administrator
+```
+
+Refuses while the actor still appears in some `initiated-by`, or in some `@actor:` mention anywhere in
+the store, and lists where — the same principle `component remove` already follows for a component.
+Deleting nothing but silently orphaning every record that still names the actor is the worst thing this
+command could do.
+
+Like `component add`/`component remove`, every `actor` command refuses before touching the file when
+`actors.json` cannot be trusted — `json-hash-missing` or `json-hash-mismatch`, file untouched.
+
+### `initiated-by`
+
+A `flow` or a `process` names who starts it in its frontmatter, as a list of actor ids:
+
+```yaml
+initiated-by: [visitor]            # flow: sign up
+initiated-by: [payment-provider]   # process: payment webhook
+```
+
+**Required on `flow` and `process`, forbidden everywhere else** — `lifecycle`, `rule`, `quality` and
+every decision. A `flow` only accepts a `human` actor; a `process` only accepts `external-system` or
+`time` — the system is never the one that starts its own process, something outside it is. `--trigger`
+has no flag of its own: `## Trigger` in the body keeps describing what happened, in prose; `initiated-by`
+says only who.
+
+### Mentions: `@actor:<id>`
+
+Any record — a spec of any type, or a decision — may mention an actor anywhere in its body:
+
+```markdown
+## Main flow
+1. @actor:visitor submits an email address and a password.
+2. The system creates the account.
+3. Support is notified if @actor:administrator needs to review it.
+```
+
+The pattern is `@` at the start of a line or right after whitespace or an opening bracket/quote,
+followed by `actor:` and an id of lowercase letters, digits and hyphens — so a sentence-closing `:`
+never becomes part of it, and an email address (`soporte@empresa.com`) never matches, since its `@`
+sits right after a letter.
+
+Every actor named in `initiated-by` must be mentioned at least once this way in the same body —
+naming who starts something and never saying so in the steps that follow is exactly the gap this
+convention closes.
+
+### Validations
+
+Every control above has a stable code, listed with the rest of `validate`'s findings in the codes
+table below (`actor-duplicate` through `actors-unreadable`).
+
+The unmarked-mention warning is deliberately narrow: it catches the actor's own words written in the
+open, never a synonym nobody declared (*"the buyer"*, with no such alias). That wider case is for
+semantic review (`reconcile`, `audit`), which resolves it by adding the alias — the mechanical check
+widens with use, never ahead of it.
+
+---
+
 ## `level`
 
 Creates a concern or subgroup folder together with its `INDEX.md`. A level cannot appear by accident:
@@ -386,8 +487,8 @@ openrecord validate --for decisions/api    → api and everything below it
 ``` It never judges whether a record is *honest* or still true of the
 code — that is reading, not linting.
 
-This walk covers `components.json`, records and indexes — everything that sits next to the store
-proper, including `actors.json`, `checks.json`, `sandbox.json` and `implementation/` as later issues
+This walk covers `components.json` and `actors.json`, records and indexes — everything that sits next
+to the store proper, including `checks.json`, `sandbox.json` and `implementation/` as later issues
 introduce them. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
 not part of the coordinate this walk covers by default, so an old or corrupt run never blocks a
 `validate` over records that have nothing to do with it. The binary still stamps and can check their
@@ -451,6 +552,19 @@ disappeared).
 | `unreachable-state` / `dead-end-state` | warning | A state with no way in, or no way out. A design bug nobody sees today. |
 | `concern-too-flat` | warning | Many loose records in one concern: a subgroup is missing. |
 | `quality-unverified` | warning | A `quality` scenario with no `VERIFIED-IN` line, and no check or sandbox covering it either — nothing says it is verified anywhere. |
+| `actor-duplicate` | error | An id declared more than once in `actors.json`. |
+| `actor-alias-duplicate` | error | An alias claimed by two different actors. |
+| `actor-invalid-kind` | error | A `kind` outside `human`, `external-system`, `time`. |
+| `initiated-by-missing` | error | A `flow` or a `process` with no `initiated-by`. |
+| `initiated-by-forbidden` | error | `initiated-by` declared on `lifecycle`, `rule`, `quality` or a decision. |
+| `initiated-by-duplicate` | error | The same actor listed twice in one `initiated-by`. |
+| `initiated-by-unknown-actor` | error | An id in `initiated-by` not declared in `actors.json`. |
+| `initiated-by-wrong-kind` | error | A non-`human` actor initiating a `flow`, or a `human` one initiating a `process`. |
+| `initiated-by-not-mentioned` | error | An `initiated-by` actor never written as `@actor:<id>` in the body. |
+| `actor-mention-unknown` | error | `@actor:<id>` naming an actor `actors.json` does not declare. |
+| `unmarked-actor-mention` | warning | A registered actor's id (hyphens also matching a space) or alias, written in the open without `@actor:`. |
+| `actors-undeclared` | error | Something needs an actor and `actors.json` does not exist yet. |
+| `actors-unreadable` | error | `actors.json` exists but cannot be parsed. |
 
 ### Exit code
 
@@ -763,6 +877,7 @@ or, allowing:
 | Tool call | Decision | Points at |
 | --- | --- | --- |
 | `Edit`/`Write`/`NotebookEdit` on `.openrecord/components.json` | deny | `component add` / `component remove` |
+| `Edit`/`Write`/`NotebookEdit` on `.openrecord/actors.json` | deny | `actor add` / `actor edit` / `actor remove` |
 | `Edit`/`Write`/`NotebookEdit` on a record under `decisions/` or `specs/` | deny | `record write` / `record edit` |
 | `Edit`/`Write`/`NotebookEdit` on an `INDEX.md` | deny | `level add` (or `component add` for a component's own index) |
 | `Edit`/`Write`/`NotebookEdit` on anything else under `.openrecord/` | deny | the matching command, generically |

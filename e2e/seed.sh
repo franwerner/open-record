@@ -49,6 +49,16 @@ or component add root --path . \
   --title "Repository" \
   --description "Build, configuration, deployment and the boundary of the system as a whole. Descend here if you touch CI, environment configuration, or something true of every surface at once."
 
+# --------------------------------------------------------------------- actors --
+or actor add shopper --kind human \
+  --description "A person buying from the shop, with a basket and a delivery address."
+
+or actor add visitor --kind human \
+  --description "A person with no account yet, found only by the email address they give."
+
+or actor add payment-provider --kind external-system \
+  --description "The payment gateway that authorises charges and reports what happened to them by webhook."
+
 # -------------------------------------------------------------------- levels --
 or level add decisions/api/security
 or level add decisions/api/security/rate-limits \
@@ -117,12 +127,14 @@ or record write specs/flow/checkout/place-an-order.md \
   --title "Place an order" \
   --description "A shopper turns a basket into a paid order, seeing the total before it is charged; a decline leaves the basket untouched and a repeated submission charges once." \
   --status accepted --components api --components web \
+  --initiated-by shopper \
   --body-file "$bodies/spec-place-an-order.md"
 
 or record write specs/flow/sign-up.md \
   --title "Sign up" \
   --description "A visitor registers with an email and password; the account cannot sign in until the emailed link is opened, and a taken address is indistinguishable from a free one." \
   --status accepted --components api --components web \
+  --initiated-by visitor \
   --body-file "$bodies/spec-sign-up.md"
 
 or record write specs/rule/usage-limits.md \
@@ -141,6 +153,7 @@ or record write specs/process/payment-webhook.md \
   --title "Payment webhook" \
   --description "A signed provider event moves an order to match what the provider did; repeated deliveries are harmless, unsigned ones are refused, and an unreachable transition is left for a person." \
   --status accepted --components api \
+  --initiated-by payment-provider \
   --body-file "$bodies/spec-payment-webhook.md"
 
 # --------------------------------------------------------------------- check --

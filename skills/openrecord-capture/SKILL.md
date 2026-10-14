@@ -195,8 +195,17 @@ openrecord record write specs/flow/sign-up.md \
   --description "A visitor registers with email and password; the account stays pending until they verify." \
   --status accepted \
   --components api --components web \
+  --initiated-by visitor \
   --body-file ./body.md
 ```
+
+A `flow` or a `process` also needs **`--initiated-by`** — who starts it: a `flow` only a `human` actor,
+a `process` only an `external-system` or `time` one, declared in `actors.json` first (`openrecord actor
+add <id> --kind ... --description ...` if it is not there yet). Mark the same actor at least once in
+the body as `@actor:<id>`, and mark any other actor the prose names in a spec or a decision the same
+way. If the prose uses a word that is not a registered actor or alias, use the actor that fits rather
+than inventing a new one, and propose `openrecord actor edit <id> --alias <word>` to the person if the
+wording is worth keeping.
 
 The binary validates both halves and writes nothing if anything fails. A rejected write is information,
 not an obstacle — read the findings and fix the record, do not work around them.

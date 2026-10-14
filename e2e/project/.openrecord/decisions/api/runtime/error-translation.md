@@ -2,12 +2,12 @@
 title: Business errors are their own hierarchy
 description: "Business errors are modelled as their own hierarchy, and a provider's errors are translated at the adapter boundary so no foreign error type travels inward."
 status: accepted
-body-hash: a5f5ffd6171e20653903e6ddd8abc319658e14e0fd55684e3a70389c9701f48f
+body-hash: 29de50ffc9c74ae187713c061ddb2d0e6606d5e8cfa4403da3fc6ab3f804f227
 ---
 
 ## Context
 
-The service calls a payment provider and a mail provider. Both raise their own errors, in their own
+The service calls a @actor:payment-provider and a mail provider. Both raise their own errors, in their own
 vocabulary, with their own idea of what is retryable. Left alone, those errors travel: a provider's
 class name ends up in a catch block three layers away, and swapping the provider becomes a change to
 code that has nothing to do with payments.

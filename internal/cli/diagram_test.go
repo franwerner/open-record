@@ -9,16 +9,39 @@ import (
 	"github.com/franwerner/open-record/internal/store"
 )
 
+// diagramActorFor is the actor id+kind `writeSpec` declares for a spec type
+// that requires initiated-by, so a diagram test can write a flow or a
+// process spec without having to care about actors itself.
+var diagramActorFor = map[string][2]string{
+	"flow":    {"visitor", store.ActorHuman},
+	"process": {"scheduler", store.ActorTime},
+}
+
+// mentionActor inserts a mention of id right after `## Purpose`, so a spec
+// that requires initiated-by also satisfies "mentioned at least once" —
+// without disturbing the rest of the body the caller actually asserts on.
+func mentionActor(body, id string) string {
+	return strings.Replace(body, "## Purpose\n\n", "## Purpose\n\n@actor:"+id+" is involved.\n", 1)
+}
+
 func writeSpec(t *testing.T, repo, specType, slug, body string) string {
 	t.Helper()
 	if _, err := os.Stat(filepath.Join(repo, store.Root, "specs", specType, store.IndexFile)); err != nil {
 		mustRun(t, repo, "level", "add", "specs/"+specType, "--title", specType, "--description", "d")
 	}
-	target := "specs/" + specType + "/" + slug + ".md"
-	mustRun(t, repo, "record", "write", target,
-		"--title", "t", "--description", "d", "--status", "accepted",
-		"--components", "api", "--body-file", bodyFile(t, body))
-	return target
+	args := []string{"record", "write", "specs/" + specType + "/" + slug + ".md",
+		"--title", "t", "--description", "d", "--status", "accepted", "--components", "api"}
+	if actor, needed := diagramActorFor[specType]; needed {
+		// Ignoring the result: the only way this fails in these tests is the
+		// actor already being declared by an earlier writeSpec call against
+		// the same repo, which is exactly what should happen.
+		_, _, _ = runIn(t, repo, "actor", "add", actor[0], "--kind", actor[1], "--description", "d")
+		body = mentionActor(body, actor[0])
+		args = append(args, "--initiated-by", actor[0])
+	}
+	args = append(args, "--body-file", bodyFile(t, body))
+	mustRun(t, repo, args...)
+	return "specs/" + specType + "/" + slug + ".md"
 }
 
 func TestDiagramRendersEachType(t *testing.T) {
@@ -179,12 +202,13 @@ func TestDiagramRefusesOnAMalformedBodyHash(t *testing.T) {
 func TestDiagramNeverReportsABodyHashMismatch(t *testing.T) {
 	repo := declared(t)
 	mustRun(t, repo, "level", "add", "specs/flow", "--title", "Flow", "--description", "d")
+	mustRun(t, repo, "actor", "add", "visitor", "--kind", "human", "--description", "d")
 
 	target := "specs/flow/signup.md"
-	body := "## Purpose\n\nx\n\n## Main flow\n\n1. The original step.\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+	body := "## Purpose\n\n@actor:visitor x\n\n## Main flow\n\n1. The original step.\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
 	mustRun(t, repo, "record", "write", target,
 		"--title", "t", "--description", "d", "--status", "accepted",
-		"--components", "api", "--body-file", bodyFile(t, body))
+		"--components", "api", "--initiated-by", "visitor", "--body-file", bodyFile(t, body))
 
 	full := filepath.Join(repo, store.Root, filepath.FromSlash(target))
 	before, err := os.ReadFile(full)

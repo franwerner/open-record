@@ -89,7 +89,7 @@ x
 	t.Run("valid flow spec with an accented scenario name -> anchors array", func(t *testing.T) {
 		body := anchorsBody(t, "valid-flow.md", `## Purpose
 
-x
+@actor:visitor does x
 
 ## Main flow
 
@@ -105,7 +105,7 @@ x
 `)
 		stdout := mustRun(t, repo, "record", "write", "specs/flow/order.md",
 			"--title", "t", "--description", "d", "--status", "accepted", "--components", "api",
-			"--body-file", body)
+			"--initiated-by", "visitor", "--body-file", body)
 		written := decode[writeReportWithAnchors](t, stdout)
 		want := []string{"archivo-muy-grande-mas-de-50-mb"}
 		if strings.Join(written.Anchors, ",") != strings.Join(want, ",") {

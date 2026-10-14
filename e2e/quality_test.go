@@ -307,7 +307,7 @@ x
 		flowTarget := "specs/flow/rename-source.md"
 		flowBody := anchorsBody(t, "rename-source.md", `## Purpose
 
-x
+@actor:visitor does x
 
 ## Main flow
 
@@ -323,7 +323,7 @@ x
 `)
 		mustRun(t, repo, "record", "write", flowTarget,
 			"--title", "t", "--description", "d", "--status", "accepted", "--components", "api",
-			"--body-file", flowBody)
+			"--initiated-by", "visitor", "--body-file", flowBody)
 
 		qualityTarget := "specs/quality/depends-on-rename.md"
 		qualityFile := anchorsBody(t, "depends-on-rename.md", qualityBody("pre-release — nightly load test in CI"))

@@ -83,6 +83,26 @@ Pick the type from what the thing is:
   manual review) goes on a `VERIFIED-IN pre-release|production|manual — <where>` line, declared as
   intent even before that test exists; something rerunnable with the same result each time is a check.
 
+### Actors come before the flows that need them
+
+A `flow` names which **human** starts it, and a `process` names which **external system or time**
+triggers it, in `initiated-by` — declared in `actors.json` first:
+
+```
+openrecord actor add administrator --kind human --description "Manages users and content."
+```
+
+Ask who, in the user's own words — "a visitor", "an administrator", "the payment provider's webhook" —
+the same way you ask for components: do not invent a name they have not used.
+
+**Mark every mention**, in a spec or a decision, as `@actor:<id>` — the first time `initiated-by` names
+an actor, the body has to say so at least once this way, and anywhere else the actor comes up is worth
+marking too, so a later reader can find every record that talks about it.
+
+**If the user's wording does not match a declared actor or alias**, do not quietly invent a new actor
+for it. Use the existing one, and if the wording is worth keeping as a synonym, propose adding it as an
+alias (`openrecord actor edit <id> --alias <word>`) rather than silently treating it as the same thing.
+
 ## Writing what they tell you
 
 A record lives in a level, and a level is created before the record — never implicitly, because
@@ -140,6 +160,7 @@ openrecord record write specs/flow/sign-up.md \
   --description "A visitor registers with email and password; the account stays pending until they verify." \
   --status accepted \
   --components api --components web \
+  --initiated-by visitor \
   --body-file ./body.md
 ```
 

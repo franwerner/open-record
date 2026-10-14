@@ -160,6 +160,7 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 	// The commands with genuinely no flags of their own. Listing them is what
 	// makes adding one to another command fail here until it is declared.
 	flagless := map[string]bool{
+		"actor remove":     true,
 		"component remove": true,
 		"component owners": true,
 		"diagram":          true,

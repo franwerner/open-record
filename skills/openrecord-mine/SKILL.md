@@ -108,6 +108,13 @@ For capability specs, read what the system does at its edges:
   manual review) goes on a `VERIFIED-IN pre-release|production|manual — <where>` line, declared as
   intent even before that test exists; something rerunnable with the same result each time is a check.
 
+**A flow or a process candidate needs its actor too.** Who calls the handler (a role, a session) or
+what triggers the job (a webhook, a schedule) is `initiated-by`, and it goes through confirmation the
+same as everything else: propose the actor from the evidence, and if it is not already declared in
+`actors.json`, propose declaring it (`openrecord actor add`) rather than silently assuming one exists.
+Once confirmed, mark it in the body as `@actor:<id>` — never invent a new actor for wording that is
+really an existing one; check `actors.json` for a matching id or alias first.
+
 **Tests are the strongest oracle available.** A test asserts an observable outcome someone cared about,
 which is exactly what a scenario is. Where a test exists, the behaviour is corroborated; where the
 behaviour has no test, say so — an uncorroborated candidate is weaker and the reader should know which

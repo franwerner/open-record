@@ -48,6 +48,11 @@ func TestHookChecksEditOnComponentsJSON(t *testing.T) {
 	assertDeny(t, out, "component add", "component remove")
 }
 
+func TestHookChecksEditOnActorsJSON(t *testing.T) {
+	out := hookDecide(t, "Edit", map[string]string{"file_path": "/repo/.openrecord/actors.json"})
+	assertDeny(t, out, "actor add", "actor edit", "actor remove")
+}
+
 func TestHookChecksWriteOnARecordPath(t *testing.T) {
 	for _, path := range []string{
 		"/repo/.openrecord/decisions/api/security/rate-limiting.md",

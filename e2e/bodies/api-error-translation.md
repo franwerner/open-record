@@ -1,6 +1,6 @@
 ## Context
 
-The service calls a payment provider and a mail provider. Both raise their own errors, in their own
+The service calls a @actor:payment-provider and a mail provider. Both raise their own errors, in their own
 vocabulary, with their own idea of what is retryable. Left alone, those errors travel: a provider's
 class name ends up in a catch block three layers away, and swapping the provider becomes a change to
 code that has nothing to do with payments.
