@@ -102,4 +102,4 @@ the way a host builds a list of available skills, so there is nothing to fall ou
 | [decision-record.md](decision-record.md) | What a decision record is and is not, where it lives, its frontmatter and body. |
 | [capability-spec.md](capability-spec.md) | The same for capability specs, plus the five types and Mermaid rendering. |
 | [cli.md](cli.md) | Every command. |
-| [concerns.md](concerns.md) | The catalogue: eleven concerns and the places projects usually have a decision worth recording. |
+| [concerns.md](concerns.md) | The catalogue: ten concerns and the places projects usually have a decision worth recording. |

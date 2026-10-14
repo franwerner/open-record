@@ -914,7 +914,7 @@ openrecord concerns
 openrecord concerns --json
 ```
 
-Prints the catalogue — eleven concerns and, under each, the places projects usually have a decision
+Prints the catalogue — ten concerns and, under each, the places projects usually have a decision
 worth recording.
 
 **This is how the catalogue is reached, and the only way.** It ships inside the binary and never enters

@@ -300,10 +300,6 @@ CI, an SLO, a manual review), write that as `VERIFIED-IN` even if it does not ex
 more sources will exist once they land: a **check** (issue 09) covering the scenario with `enforces`,
 and a **sandbox** (issue 11) approximating it in local with `approximates`. Neither is implemented yet.
 
-**Note on `docs/concerns.md`.** The catalogue today asks about performance objectives as if they were
-a decision. That question's performance half belongs here instead — a `quality` spec, not a decision —
-but moving it is tracked separately (issue 07) and is not part of this document's change.
-
 ### Anchors
 
 Every `### Scenario: <name>` has a stable, addressable identifier: its **anchor**. A `lifecycle`

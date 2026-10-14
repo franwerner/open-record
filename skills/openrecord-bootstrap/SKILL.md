@@ -46,7 +46,7 @@ files sits outside every declared surface forever.
 openrecord concerns
 ```
 
-The catalogue ships inside the binary. It lists eleven concerns and, under each, the places projects
+The catalogue ships inside the binary. It lists ten concerns and, under each, the places projects
 usually have a decision worth recording. It exists so you know **what to ask**, not what to write.
 
 Go concern by concern, for each component, and ask what was decided. Real questions, not a form:

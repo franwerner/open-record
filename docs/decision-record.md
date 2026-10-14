@@ -93,8 +93,8 @@ holds concerns that actually have a record in them.
 
 It has two levels, and each does a different job.
 
-**Eleven concerns — the folder vocabulary.** `structure`, `domain-logic`, `runtime`, `data`,
-`data-lifecycle`, `contracts`, `integration`, `security`, `observability`, `delivery`, `quality`. This is
+**Ten concerns — the folder vocabulary.** `structure`, `domain-logic`, `runtime`, `data`,
+`data-lifecycle`, `contracts`, `integration`, `security`, `observability`, `delivery`. This is
 what a writer picks from when filing a record. A project that needs one the catalogue does not have
 simply invents it, and writes its `INDEX.md` without having anything to copy from.
 
