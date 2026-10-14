@@ -50,7 +50,7 @@ command's `checks.json` entry carries `{files}` rather than naming a fifth value
 | `pre-merge` | A check over the whole project, before it integrates | A `checks.json` command with no `{files}` |
 | `pre-release` | An automated measurement against a non-real environment, before users reach the change | Not a check at all today — a load test, Lighthouse on a preview, a staging scan, a periodic dependency audit |
 | `production` | Measured against the real system, with real users | An SLO or a field metric; not a check `checks.json` runs |
-| `manual` | A person looks, by hand | Registered as a check of type `human` once that lands |
+| `manual` | A person looks, by hand | Never a check: `checks.json` only holds what code can verify. A `quality` spec says it with `VERIFIED-IN manual`; a decision or a functional spec says how it is reviewed in its own prose |
 
 This is also the old draft's five stages renamed, not a new idea: `edit` became `on-change`; `pr` and
 `main` both became `pre-merge`, because both are a whole-project gate before code is on the trunk;
@@ -759,7 +759,8 @@ nobody can see.
 ### delivery/ci-quality-gates
 - **Binds to** the decision at `delivery/ci-quality-gates`
 - **To be verifiable, the record says** what blocks a merge, and what only reports
-- **Mechanism** the stages declared in the project's own `checks.json` (task 09)
+- **Mechanism** the project's own `checks.json` (task 09): every check there runs before a merge, the
+  ones taking `{files}` also on each change; what only reports, and does not block, stays out of it
 - **Where it lands** pre-merge
 - **Class** full-check
 
