@@ -81,7 +81,8 @@ judgement:
 │       ├── <capability>.md
 │       └── [<subgroup>/]
 ├── components.json             the declared surfaces, the format version, and an integrity hash
-└── actors.json                 who can initiate a flow or a process, optional until something needs one
+├── actors.json                 who can initiate a flow or a process, optional until something needs one
+└── checks.json                 the checks registry: what command verifies which decision or spec, optional too
 ```
 
 Two rules generate most of this layout:

@@ -161,6 +161,7 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 	// makes adding one to another command fail here until it is declared.
 	flagless := map[string]bool{
 		"actor remove":     true,
+		"check remove":     true,
 		"component remove": true,
 		"component owners": true,
 		"diagram":          true,

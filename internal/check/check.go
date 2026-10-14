@@ -92,6 +92,25 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 		findings = append(findings, store.VerifyActors(repo, actors)...)
 	}
 
+	checks, err := store.LoadChecks(repo)
+	if err != nil {
+		if !store.IsChecksUndeclared(err) {
+			if item, ok := err.(finding.Finding); ok {
+				findings = append(findings, item)
+			} else {
+				return nil, err
+			}
+		}
+		// An undeclared checks.json is benign on its own, the same as
+		// actors.json above — nothing requires a check to exist.
+	} else {
+		findings = append(findings, checks.Validate()...)
+		findings = append(findings, store.VerifyChecks(repo, checks)...)
+		for _, item := range checks.Checks {
+			findings = append(findings, CheckEntry(repo, item, store.ChecksFile)...)
+		}
+	}
+
 	files, walkFindings, err := store.Walk(repo, coordinate)
 	if err != nil {
 		return nil, err

@@ -31,6 +31,7 @@ without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial re
 | `map` | Navigate the store, one level at a time. |
 | `component` | Declare, remove and resolve components. |
 | `actor` | Declare, edit and remove actors — who can initiate a flow or a process. |
+| `check` | Declare and remove checks — task 09's registry of what verifies a decision or a spec. |
 | `level` | Create a concern or subgroup folder with its index. |
 | `record` | Write and edit records. |
 | `validate` | Check a coordinate is well-formed, recursively. |
@@ -327,6 +328,113 @@ widens with use, never ahead of it.
 
 ---
 
+## `check` {#check}
+
+The checks registry (task 09): `checks.json` maps **what verifies a decision or a spec** to **the
+command that actually runs it** — a tool, installed and configured once, covering many records at a
+time. It never runs anything itself; it only indexes commands and the scope each one is responsible
+for. See [decision-record.md](decision-record.md#checks) for the reasoning behind the shape below, and
+[verification.md](verification.md#where-it-lands) for how this registry's two cases map onto the wider
+`on-change`/`pre-merge`/`pre-release`/`production`/`manual` vocabulary.
+
+**Three levels, each with its own job**, and `checks.json` is only the middle one:
+
+| Piece | Says | Lives |
+| --- | --- | --- |
+| A tool decision | Why this tool | The store, in prose — typically a `delivery` concern |
+| `checks.json` | How it runs, over what | Next to `components.json`, machine-readable |
+| Annotations in the code | Which rule or test covers one record | The code itself (a later task) |
+
+### `check add`
+
+```
+openrecord check add arch-layers \
+  --command "go-arch-lint check" \
+  --justified-by decisions/api/delivery/go-arch-lint.md \
+  --enforces decisions/api/structure
+```
+
+`--command` and `--justified-by` are required, and the command fails without either. `--enforces` and
+`--config` are each optional and repeatable.
+
+**`--justified-by`** is the one decision that justifies running this tool at all, so no entry floats
+with no origin — the same principle `serves` and `depends-on` already follow for a decision's own
+relations. It must name an existing record, and that record must be a decision: a path into `specs/`,
+or one that does not resolve to a record at all, is refused.
+
+**`--enforces`** is what the check is responsible for, which is also its scope: either a whole record
+path, or a **group coordinate** — `decisions/api/structure`, exactly the kind `map` and `validate --for`
+already resolve. A path ending `.md` is read as a record; anything else is read as a coordinate and
+walked with the identical mechanism `validate` itself uses to recurse one, never a parallel resolver
+invented for this command. Each entry must resolve to something: a record that does not exist, a
+coordinate the store does not know, or a group with nothing filed in it yet, are all refused. **A check
+with no `--enforces` at all is a hygiene check** — it is accepted, and enforces no record. It is not the
+same weight as one that does: see "Hygiene checks weigh less" below.
+
+**`--config`** is the tool's own configuration files, repository-relative, repeatable — each one must
+already exist in the repository.
+
+Creates `checks.json` if it is absent — with the format version in it — adds the entry, and stamps the
+same integrity `hash` every other JSON file under `.openrecord/` carries (see
+[decision-record.md](decision-record.md#hash)). Refuses instead of writing — `json-hash-missing` or
+`json-hash-mismatch`, file untouched — when an existing `checks.json` cannot be trusted, the same way
+`component add` and `actor add` refuse over a tampered file. Refused, too, when the `id` is already
+declared.
+
+### `check remove`
+
+```
+openrecord check remove arch-layers
+```
+
+Removes the entry. **There is no `check edit`**, deliberately: unlike a component or an actor, nothing
+else in the store ever references a check by its `id` — no record names one — so remove-then-add is
+every bit as cheap as an edit would be, and there is no "still referenced" case for an edit to protect
+against the way `component remove`/`actor remove` do. Like every `check` command, it refuses before
+touching the file when `checks.json` cannot be trusted.
+
+### Why there is no `stage` field
+
+A check runs either on just the files a change touched, or over the whole project — and that is read
+off `command` itself, never a separate field:
+
+| The command… | Means | Example |
+| --- | --- | --- |
+| Contains the literal `{files}` | Runs on just the touched files: cheap, after every change — `on-change` | `golangci-lint run {files}` |
+| Does not contain `{files}` | Runs over the whole project: closing a task, or whenever asked — `pre-merge` | `go-arch-lint check`, `go test ./...` |
+
+`{files}` is a **classification this binary reports, never logic it executes** — nothing here ever
+shells out to run a check's command. Which checks actually run, and when, is the implementing flow's or
+the project's own CI, never this binary's job: see [verification.md](verification.md#where-it-lands) for
+how these two values map onto that document's wider vocabulary of `on-change` and `pre-merge`.
+
+### What never belongs in `checks.json`
+
+**Only what a command can verify deterministically.** Manual review and anything statistical or
+needing a real environment — load, SLOs, a person looking — are never registered here: a `quality` spec
+records that kind of verification in its own `VERIFIED-IN` line, and a decision or a functional spec
+records it in its own prose. `check add` has no flag that would let either in, and this is intentional,
+not an oversight — see [decision-record.md](decision-record.md#checks) for the fuller reasoning.
+
+### Hygiene checks weigh less
+
+A check with no `--enforces` enforces no record — code health, dead code, duplication. It is accepted,
+but it does not carry the same weight as a check that does enforce something: a hygiene check that
+counted the same as one backed by a decision would reward optimizing its own metric instead of actually
+meeting what was decided.
+
+### Validations
+
+Every control above has a stable code, listed with the rest of `validate`'s findings in the codes table
+below (`check-duplicate` through `check-config-not-found`). `validate` reports the same findings against
+`checks.json` as it already sits on disk — a `justified-by` whose decision disappeared or stopped being
+a decision, an `enforces` group emptied out, or a `config` file that no longer exists are all breakage,
+not just an add-time refusal, and `config` existence is re-checked at `validate` time for exactly that
+reason: a config file going missing later is no safer to leave unnoticed than a decision disappearing
+later is.
+
+---
+
 ## `level`
 
 Creates a concern or subgroup folder together with its `INDEX.md`. A level cannot appear by accident:
@@ -488,9 +596,9 @@ openrecord validate --for decisions/api    → api and everything below it
 ``` It never judges whether a record is *honest* or still true of the
 code — that is reading, not linting.
 
-This walk covers `components.json` and `actors.json`, records and indexes — everything that sits next
-to the store proper, including `checks.json`, `sandbox.json` and `implementation/` as later issues
-introduce them. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
+This walk covers `components.json`, `actors.json` and `checks.json`, records and indexes — everything
+that sits next to the store proper, plus `sandbox.json` and `implementation/` as later issues introduce
+them. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
 not part of the coordinate this walk covers by default, so an old or corrupt run never blocks a
 `validate` over records that have nothing to do with it. The binary still stamps and can check their
 `hash` (see [decision-record.md](decision-record.md#hash)), just through the execution's own commands
@@ -566,6 +674,16 @@ disappeared).
 | `unmarked-actor-mention` | warning | A registered actor's id (hyphens also matching a space) or alias, written in the open without `@actor:`. |
 | `actors-undeclared` | error | Something needs an actor and `actors.json` does not exist yet. |
 | `actors-unreadable` | error | `actors.json` exists but cannot be parsed. |
+| `check-duplicate` | error | An `id` declared more than once in `checks.json`. |
+| `check-without-command` | error | A check with no `command`. |
+| `check-justified-by-missing` | error | A check with no `justified-by` at all. |
+| `check-justified-by-not-found` | error | `justified-by` names a record that does not exist. |
+| `check-justified-by-not-decision` | error | `justified-by` names a record that is not a decision. |
+| `check-enforces-not-found` | error | `enforces` names a record or a coordinate that does not exist. |
+| `check-enforces-empty-group` | error | `enforces` names a group coordinate with nothing filed in it. |
+| `check-config-not-found` | error | A `config` file that does not exist in the repository. |
+| `checks-undeclared` | error | Something needs a check and `checks.json` does not exist yet. |
+| `checks-unreadable` | error | `checks.json` exists but cannot be parsed. |
 
 ### Exit code
 
@@ -836,8 +954,9 @@ project root) rather than a bare `.openrecord/**` (anchored at the session's cur
 
 Two blocks the original task described as part of this guard are **out of scope here**: blocking an edit
 to a check's own configuration file, and blocking `record write`/`record edit` while an implementation run
-is in progress. Both depend on state this binary does not have yet — `checks.json` and a run's `run.json`
-— tracked by issues 09 and 15, and are not required for this guard to be useful on its own.
+is in progress. `checks.json` exists now and names which files are a check's configuration (`cli.md#check`),
+but knowing whether either block should actually fire still depends on a run being active, which depends
+on a run's `run.json` — tracked by issue 15, and not required for this guard to be useful on its own.
 
 ---
 
@@ -879,6 +998,7 @@ or, allowing:
 | --- | --- | --- |
 | `Edit`/`Write`/`NotebookEdit` on `.openrecord/components.json` | deny | `component add` / `component remove` |
 | `Edit`/`Write`/`NotebookEdit` on `.openrecord/actors.json` | deny | `actor add` / `actor edit` / `actor remove` |
+| `Edit`/`Write`/`NotebookEdit` on `.openrecord/checks.json` | deny | `check add` / `check remove` |
 | `Edit`/`Write`/`NotebookEdit` on a record under `decisions/` or `specs/` | deny | `record write` / `record edit` |
 | `Edit`/`Write`/`NotebookEdit` on an `INDEX.md` | deny | `level add` (or `component add` for a component's own index) |
 | `Edit`/`Write`/`NotebookEdit` on anything else under `.openrecord/` | deny | the matching command, generically |

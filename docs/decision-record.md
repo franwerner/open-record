@@ -351,6 +351,34 @@ add`/`actor edit`/`actor remove`, and the pattern that keeps an email address fr
   in words — there are already two ways to reach a record even without a written link: descend with
   `map`, or find it with `grep`.
 
+## The checks registry reopens one boundary {#checks}
+
+This document has always kept a decision itself free of anything a tool executes: the body is prose,
+`## Decision` states a choice in words, and nothing in the frontmatter above names a command. That
+boundary still holds — task 09's `checks.json` does not put a command inside a record.
+
+What task 09 adds instead is a **separate** declaration, next to `components.json` and `actors.json`:
+`checks.json` maps a command to the decision that justifies running it and the group it enforces. The
+link is declared by `checks.json`, the side that depends, exactly the same split `serves` and
+`depends-on` already draw between two records above — a decision never names the tool that verifies it,
+the tool's own entry names the decision instead. See [cli.md](cli.md#check) for the full shape.
+
+**Why this earlier boundary is safe to narrow, and only this far:**
+
+- A command lives in `checks.json`, never in a record's frontmatter or body. Reopening *that* — letting
+  a decision itself carry something executable — is still refused; nothing about this task changes it.
+- `checks.json` only ever holds what a command can verify **deterministically**. Manual review and
+  anything statistical or needing a real environment (load, an SLO, a person looking) are refused at
+  `check add` and stay exactly where they already lived: a `VERIFIED-IN` line on a `quality` spec, or a
+  decision's or a functional spec's own prose. See [verification.md](verification.md#where-it-lands) for
+  the full vocabulary this sits inside.
+- `checks.json` carries the same integrity `hash` every other JSON file under `.openrecord/` does (see
+  [`#hash`](#hash) above), so a hand-edit is exactly as detectable as a hand-edit anywhere else in the
+  store — the registry does not get to be less trustworthy than the records it points at.
+- The binary only ever reads `checks.json` to report on it — `map`, `validate`, `check add`/`check
+  remove`. Nothing in this binary shells out to run a check's command; which checks actually run, and
+  when, stays the implementing flow's or the project's own CI's job, never this format's.
+
 ## Body
 
 Four sections, and nothing else.

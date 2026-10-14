@@ -11,10 +11,10 @@
 // can see into, so that half is a best-effort pattern match on the command
 // text, documented as such, never the actual barrier.
 //
-// Two things are explicitly out of scope here: blocking a config file edit or
-// a `record write`/`record edit` while an implementation run is in progress.
-// Both depend on state this binary does not have yet (`checks.json` and a
-// run's `run.json`), tracked by issues 09 and 15.
+// One thing is explicitly out of scope here: blocking a config file edit or
+// a `record write`/`record edit` while an implementation run is in
+// progress. That depends on state this binary does not have yet (a run's
+// `run.json`), tracked by issue 15.
 package cli
 
 import (
@@ -174,6 +174,9 @@ func decideWritePath(raw string) (bool, string) {
 	}
 	if rel == store.ActorsFile {
 		return true, "`" + store.ActorsFile + "` is written only by `openrecord actor add` / `openrecord actor edit` / `openrecord actor remove`."
+	}
+	if rel == store.ChecksFile {
+		return true, "`" + store.ChecksFile + "` is written only by `openrecord check add` / `openrecord check remove`."
 	}
 	if filepath.Base(rel) == store.IndexFile {
 		return true, "`" + store.IndexFile + "` is written only by `openrecord level add` (a component's own index comes from `openrecord component add`)."

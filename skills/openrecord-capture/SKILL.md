@@ -155,8 +155,15 @@ all, and where that kind of claim typically lands (`on-change`, `pre-merge`, `pr
 `production`, `manual`).
 
 Write the record so a check could fail against it, and if the person has not said how it would be
-verified, suggest one — as a suggestion, never a tool picked on their behalf, and never a `checks.json`
-entry created on the spot: that registry is a separate, later decision, not this skill's to make.
+verified, suggest one — as a suggestion, never a tool picked on their behalf.
+
+**If the verification clearly lands `on-change` or `pre-merge`, and the person has already named the
+concrete tool** (not you suggesting one — *them* saying "we run `go-arch-lint check`" or similar),
+register it: `openrecord check add <id> --command "<command>" --justified-by <decision> [--enforces
+<record-or-coordinate>]`. Still never pick the tool yourself, and never register anything manual or
+statistical in `checks.json` — a `pre-release`, `production` or `manual` verification, or anything a
+person has to look at, stays out of the registry and is said in the record's own prose or `VERIFIED-IN`
+line instead.
 
 ## Writing
 

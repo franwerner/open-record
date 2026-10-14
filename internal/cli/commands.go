@@ -63,6 +63,25 @@ var commands = []*Command{
 		},
 	},
 	{
+		Name:    "check",
+		Summary: "Declare and remove checks — task 09's registry of what verifies a decision or a spec.",
+		Sub: []*Command{
+			{
+				Name:    "add",
+				Summary: "Declare a check: a command, the decision that justifies it, and what it enforces.",
+				Usage:   "openrecord check add ID --command CMD --justified-by PATH [--enforces PATH-OR-COORDINATE] [--config PATH]",
+				Flags:   describes(checkAddFlags),
+				Run:     runCheckAdd,
+			},
+			{
+				Name:    "remove",
+				Summary: "Remove a check.",
+				Usage:   "openrecord check remove ID",
+				Run:     runCheckRemove,
+			},
+		},
+	},
+	{
 		Name:    "level",
 		Summary: "Create a concern or subgroup with its index.",
 		Sub: []*Command{

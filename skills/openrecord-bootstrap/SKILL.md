@@ -67,7 +67,12 @@ years later.
 needs to contain to be checkable at all, and where that kind of decision typically lands (`on-change`,
 `pre-merge`, `pre-release`, `production`, `manual`). Write the decision so a check could fail against
 it, and suggest how it would be verified if the person has not said — as a suggestion, never a tool
-picked on their behalf, and never a `checks.json` entry created on the spot.
+picked on their behalf.
+
+**If it lands `on-change` or `pre-merge` and the user already named the concrete tool**, register it
+with `openrecord check add <id> --command "<command>" --justified-by <this decision> [--enforces
+<record-or-coordinate>]`. Never choose the tool yourself, and never put a `pre-release`, `production` or
+`manual` verification into `checks.json` — that stays in the record's own prose or `VERIFIED-IN`.
 
 ## Behaviour is a different interview
 
@@ -94,7 +99,9 @@ Pick the type from what the thing is:
 spec (`flow/main-flow`, `lifecycle/transitions`...), or the attribute for a `quality` spec (`latency`,
 `accessibility`...). It says what the record needs to contain to be verifiable, and where that kind of
 claim typically lands. Suggest a verification approach if the person hasn't named one, but never pick a
-tool for them and never create a `checks.json` entry — that registry is a separate, later decision.
+tool for them. If it lands `on-change` or `pre-merge` and the person already named the concrete tool,
+register it with `openrecord check add` (see the decision interview above); never for a `pre-release`,
+`production` or `manual` verification — that stays a `VERIFIED-IN` line or the record's own prose.
 
 ### Actors come before the flows that need them
 
