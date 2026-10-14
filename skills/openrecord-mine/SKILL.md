@@ -102,6 +102,11 @@ For capability specs, read what the system does at its edges:
   it holds across several.
 - **State machines** — an entity's states and transitions, a `lifecycle`.
 - **Event handlers and scheduled work** — a `process`; what triggers it is the fact that defines it.
+- **A performance, availability or similar target** — a timeout, an SLO, an accessibility level: needs
+  a percentile, a load or a measurement window to judge, not a yes/no per case → a `quality` spec,
+  `qualifies`-linked to the functional spec it characterizes. Say how it is verified: a target checked outside the repo (a nightly load test in CI, an SLO, a
+  manual review) goes on a `VERIFIED-IN pre-release|production|manual — <where>` line, declared as
+  intent even before that test exists; something rerunnable with the same result each time is a check.
 
 **Tests are the strongest oracle available.** A test asserts an observable outcome someone cared about,
 which is exactly what a scenario is. Where a test exists, the behaviour is corroborated; where the

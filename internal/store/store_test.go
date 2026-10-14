@@ -195,7 +195,7 @@ func TestLevelListsDeclaredComponentsAndFixedTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(entries) != len(SpecTypes) {
-		t.Errorf("spec types = %d entries, want %d (all four exist whether or not they are on disk)", len(entries), len(SpecTypes))
+		t.Errorf("spec types = %d entries, want %d (all five exist whether or not they are on disk)", len(entries), len(SpecTypes))
 	}
 	// Counting them is not enough: a listing that advertises a level a reader
 	// cannot open, or one it cannot decide on, is worse than not listing it.
@@ -345,6 +345,29 @@ func TestRecordRoundTrip(t *testing.T) {
 	}
 	if got := RenderRecord(record, Specs); string(got) != string(source) {
 		t.Errorf("round trip changed the file:\nwant %q\ngot  %q", source, got)
+	}
+}
+
+// TestRecordRoundTripWithQualifies pins where `qualifies` sits in the fixed
+// field order (after components, before body-hash) and that a record with
+// none omits the field entirely rather than rendering an empty list.
+func TestRecordRoundTripWithQualifies(t *testing.T) {
+	body := "## Purpose\n\nx\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n- **MEASURE** p95 < 10s\n"
+	source := []byte("---\ntitle: Upload is fast\ndescription: p95 under 10s.\nstatus: accepted\ncomponents: [api]\nqualifies: [specs/flow/upload-file.md#successful-upload]\nbody-hash: " + BodyHash(body) + "\n---\n\n" + body)
+	record, findings := ParseRecord(source, Specs, "x.md")
+	if len(findings) != 0 {
+		t.Fatalf("valid quality spec produced findings: %+v", findings)
+	}
+	if got := []string{"specs/flow/upload-file.md#successful-upload"}; strings.Join(record.Qualifies, ",") != strings.Join(got, ",") {
+		t.Errorf("qualifies = %v, want %v", record.Qualifies, got)
+	}
+	if rendered := RenderRecord(record, Specs); string(rendered) != string(source) {
+		t.Errorf("round trip changed the file:\nwant %q\ngot  %q", source, rendered)
+	}
+
+	record.Qualifies = nil
+	if rendered := RenderRecord(record, Specs); strings.Contains(string(rendered), "qualifies") {
+		t.Errorf("an empty qualifies was rendered anyway: %q", rendered)
 	}
 }
 

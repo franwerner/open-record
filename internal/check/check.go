@@ -16,9 +16,11 @@ import (
 // together is a judgement about the records, not about how many there are.
 const FlatConcern = 5
 
-// Record checks one record whole — frontmatter and body — without touching the
-// disk, so the write path and validate run the same checks.
-func Record(raw []byte, coordinate store.Coordinate, declared store.Components, path string) []finding.Finding {
+// Record checks one record whole — frontmatter and body — plus, for a
+// `quality` spec, its `qualifies` link against whatever else is already on
+// disk. repo is needed only for that last part: every other check here looks
+// at nothing but raw.
+func Record(raw []byte, coordinate store.Coordinate, declared store.Components, repo, path string) []finding.Finding {
 	record, findings := store.ParseRecord(raw, coordinate.Kind, path)
 
 	if record.BodyHash != "" && store.BodyHash(record.Body) != record.BodyHash {
@@ -43,7 +45,9 @@ func Record(raw []byte, coordinate store.Coordinate, declared store.Components, 
 	if coordinate.Kind == store.Specs && coordinate.Depth() > 0 {
 		specType = coordinate.Segments[0]
 	}
-	return append(findings, Body(record.Body, coordinate.Kind, specType, path)...)
+	findings = append(findings, Body(record.Body, coordinate.Kind, specType, path)...)
+	findings = append(findings, checkQualifies(record, coordinate, repo, path)...)
+	return findings
 }
 
 // Store checks everything under a coordinate, recursively.
@@ -91,7 +95,7 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 			findings = append(findings, finding.Errorf(finding.CodeInvalidCoordinate, "%v", parseErr).At(file.Path))
 			continue
 		}
-		findings = append(findings, Record(raw, recordCoordinate, declared, file.Path)...)
+		findings = append(findings, Record(raw, recordCoordinate, declared, repo, file.Path)...)
 	}
 
 	findings = append(findings, flatConcerns(files)...)

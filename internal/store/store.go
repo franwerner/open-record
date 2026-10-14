@@ -40,7 +40,7 @@ var Kinds = []Kind{Decisions, Specs}
 
 // SpecTypes is the fixed set. A type with no records still exists, which is why
 // this is a constant list rather than whatever happens to be on disk.
-var SpecTypes = []string{"flow", "rule", "lifecycle", "process"}
+var SpecTypes = []string{"flow", "rule", "lifecycle", "process", "quality"}
 
 // maxSegments is how deep each store goes below its own name. Decisions carry an
 // extra level because they are filed by component before concern; specs are

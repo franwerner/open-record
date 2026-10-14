@@ -47,11 +47,11 @@ var storeSummary = map[Kind]Entry{
 	},
 }
 
-// specTypeSummary is what each of the four types is, shipped with the binary
+// specTypeSummary is what each of the five types is, shipped with the binary
 // for the same reason storeSummary is: the types are the format, not a
 // project's choice. Without this a project has to invent wording for a thing the
 // binary already defines, and every project invents different wording for the
-// same four types — in the one place the format most wants a shared vocabulary,
+// same five types — in the one place the format most wants a shared vocabulary,
 // since these descriptions are what an agent reads to decide where to descend.
 var specTypeSummary = map[string]Entry{
 	"flow": {
@@ -70,6 +70,10 @@ var specTypeSummary = map[string]Entry{
 		Title:       "Process",
 		Description: "Work triggered by an event rather than by an actor. Descend here for what happens on its own — a webhook arriving, a schedule firing — and what it does when it happens twice.",
 	},
+	"quality": {
+		Title:       "Quality",
+		Description: "A quality attribute of a behaviour the system already has: a percentile, a load or a measurement window, never a plain yes or no. Descend here for a performance, availability or similar target, and what qualifies it.",
+	},
 }
 
 // SpecTypeSummary returns the shipped title and description for a spec type.
@@ -81,7 +85,7 @@ func SpecTypeSummary(name string) (Entry, bool) {
 // Declared reports whether the store knows a coordinate even with nothing on
 // disk for it.
 //
-// The stores themselves, the declared components and the four spec types all
+// The stores themselves, the declared components and the five spec types all
 // exist by declaration. "Nothing has been filed here yet" and "there is no such
 // place" are different answers, and only the second is a bad coordinate — which
 // is what lets a listing advertise a level a reader can then actually open.
@@ -101,7 +105,7 @@ func Declared(repo string, coordinate Coordinate) bool {
 
 // Level lists what hangs off a coordinate.
 //
-// Two levels are not read off the disk. The components and the four spec types
+// Two levels are not read off the disk. The components and the five spec types
 // come from what is *declared*, so a surface with no records still appears:
 // "this has nothing yet" and "this does not exist" are different answers and
 // only one of them is true.

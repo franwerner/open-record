@@ -78,6 +78,10 @@ Pick the type from what the thing is:
 - a rule that holds across several flows → `rule`
 - an entity's states and what moves between them → `lifecycle`
 - work triggered by an event rather than an actor → `process`
+- a percentile, a load or a measurement window on behaviour one of the above already describes, never
+  a plain per-case yes or no → `quality`, linked to it with `qualifies` Say how it is verified: a target checked outside the repo (a nightly load test in CI, an SLO, a
+  manual review) goes on a `VERIFIED-IN pre-release|production|manual — <where>` line, declared as
+  intent even before that test exists; something rerunnable with the same result each time is a check.
 
 ## Writing what they tell you
 
@@ -89,7 +93,7 @@ openrecord level add decisions/api/security
 openrecord level add specs/flow
 ```
 
-The concerns come from the catalogue and the four spec types come from the binary, so both fill in their
+The concerns come from the catalogue and the five spec types come from the binary, so both fill in their
 own title and description. A **subgroup** has neither, and needs `--title` and `--description`: it is
 named for whatever its records share, and that is a judgement about those records.
 

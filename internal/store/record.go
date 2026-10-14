@@ -32,6 +32,7 @@ const (
 	FieldDescription = "description"
 	FieldStatus      = "status"
 	FieldComponents  = "components"
+	FieldQualifies   = "qualifies"
 	FieldBodyHash    = "body-hash"
 )
 
@@ -56,6 +57,10 @@ type Record struct {
 	// Components is the surfaces a spec reaches. Mandatory there, absent on a
 	// decision, which is closed by the component it is filed under.
 	Components []string
+	// Qualifies is the whole-file, optional link from a `quality` spec to the
+	// one or more functional specs (or their anchors) it characterizes. Absent
+	// on every other kind of record.
+	Qualifies []string
 	// BodyHash is the stamped SHA-256 of the body, carried verbatim. Empty when
 	// the field was absent or outside its domain — both already reported.
 	BodyHash string
@@ -174,11 +179,19 @@ func ParseRecord(raw []byte, kind Kind, path string) (Record, []finding.Finding)
 
 	known := []string{FieldTitle, FieldDescription, FieldStatus, FieldBodyHash}
 	if kind == Specs {
-		known = append(known, FieldComponents)
+		known = append(known, FieldComponents, FieldQualifies)
 		record.Components, _ = document.Strings(FieldComponents)
 		if len(record.Components) == 0 {
 			findings = append(findings, finding.Errorf(finding.CodeEmptyComponents,
 				"a spec must declare the components it reaches: without them it crosses with no path and drops out of every scope check silently").At(path))
+		}
+		if document.Has(FieldQualifies) {
+			if list, ok := document.Strings(FieldQualifies); ok {
+				record.Qualifies = list
+			} else {
+				findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
+					"qualifies must be a list of spec paths, each optionally followed by #anchor").At(path))
+			}
 		}
 	} else if document.Has(FieldComponents) {
 		findings = append(findings, finding.Errorf(finding.CodeInvalidFrontmatter,
@@ -209,6 +222,9 @@ func RenderRecord(record Record, kind Kind) []byte {
 	}
 	if kind == Specs {
 		fields = append(fields, frontmatter.List(FieldComponents, record.Components))
+		if len(record.Qualifies) > 0 {
+			fields = append(fields, frontmatter.List(FieldQualifies, record.Qualifies))
+		}
 	}
 	fields = append(fields, frontmatter.Text(FieldBodyHash, record.BodyHash))
 	return frontmatter.Render(fields, record.Body)

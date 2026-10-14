@@ -45,7 +45,17 @@ var (
 	branchPattern     = regexp.MustCompile(`^\s*-\s+\*\*\[(\d+)\]`)
 	transitionPattern = regexp.MustCompile(`^\s*-\s+(.+?)\s*(?:→|->)\s*(.+?)\s*(?:\((.*)\))?\s*$`)
 	scenarioPattern   = regexp.MustCompile(`(?m)^###\s+Scenario:\s*(.+?)\s*$`)
+	// verifiedInPattern pulls the value off a `- **VERIFIED-IN** <value> — ...`
+	// line; the free text after the value is never validated, only where it
+	// says to look.
+	verifiedInPattern = regexp.MustCompile(`(?m)^\s*-\s+\*\*VERIFIED-IN\*\*\s+(\S+)`)
 )
+
+// verifiedInValues is VERIFIED-IN's whole domain: when a scenario is verified
+// outside anything the binary can run itself. Checks (issue 09) and sandbox
+// approximations (issue 11) will later be two more sources, but today this
+// line is the only one.
+var verifiedInValues = map[string]bool{"pre-release": true, "production": true, "manual": true}
 
 // Body reports what is structurally wrong with a record's prose.
 func Body(body string, kind store.Kind, specType, path string) []finding.Finding {
@@ -61,7 +71,7 @@ func Body(body string, kind store.Kind, specType, path string) []finding.Finding
 	findings := missingAndUnexpected(sections, required, allowed, kind, specType, path)
 	findings = append(findings, checkBranchAnchors(sections, path)...)
 	findings = append(findings, checkTransitions(sections, path)...)
-	findings = append(findings, checkScenarios(sections, path)...)
+	findings = append(findings, checkScenarios(sections, specType, path)...)
 	findings = append(findings, checkAnchors(body, path)...)
 	return findings
 }
@@ -183,7 +193,15 @@ func checkTransitions(sections map[string][]string, path string) []finding.Findi
 
 // checkScenarios verifies the shape and nothing else. Whether a THEN is
 // genuinely observable is judgement, and judgement is not this binary's job.
-func checkScenarios(sections map[string][]string, path string) []finding.Finding {
+//
+// A `quality` scenario carries a fourth required field, MEASURE — the
+// percentile, load or window that gives the THEN a sense — plus the optional,
+// repeatable VERIFIED-IN line declaring where a human or another system
+// checks what the binary cannot run itself. VERIFIED-IN only ever belongs to
+// a `quality` scenario: anywhere else it is reported rather than ignored,
+// because a performance note hiding inside a functional scenario is exactly
+// the mixing this type exists to prevent.
+func checkScenarios(sections map[string][]string, specType, path string) []finding.Finding {
 	lines, present := sections["## Scenarios"]
 	if !present {
 		return nil
@@ -198,6 +216,12 @@ func checkScenarios(sections map[string][]string, path string) []finding.Finding
 		return nil
 	}
 
+	quality := specType == "quality"
+	keywords := []string{"GIVEN", "WHEN", "THEN"}
+	if quality {
+		keywords = append(keywords, "MEASURE")
+	}
+
 	var findings []finding.Finding
 	for index, location := range locations {
 		end := len(text)
@@ -206,11 +230,29 @@ func checkScenarios(sections map[string][]string, path string) []finding.Finding
 		}
 		name := strings.TrimSpace(text[location[2]:location[3]])
 		block := text[location[1]:end]
-		for _, keyword := range []string{"GIVEN", "WHEN", "THEN"} {
+		for _, keyword := range keywords {
 			if !strings.Contains(block, "**"+keyword+"**") {
 				findings = append(findings, finding.Errorf(finding.CodeMalformedScenario,
 					"scenario %q has no %s", name, keyword).At(path))
 			}
+		}
+
+		verified := 0
+		for _, match := range verifiedInPattern.FindAllStringSubmatch(block, -1) {
+			verified++
+			if !quality {
+				findings = append(findings, finding.Errorf(finding.CodeVerifiedInNotQuality,
+					"scenario %q carries VERIFIED-IN, but only a quality scenario is verified outside a deterministic check", name).At(path))
+				continue
+			}
+			if value := match[1]; !verifiedInValues[value] {
+				findings = append(findings, finding.Errorf(finding.CodeVerifiedInInvalid,
+					"scenario %q: VERIFIED-IN %q is not pre-release, production or manual", name, value).At(path))
+			}
+		}
+		if quality && verified == 0 {
+			findings = append(findings, finding.Warnf(finding.CodeQualityUnverified,
+				"scenario %q has no VERIFIED-IN line: nothing says how it is verified; if the person said how (a nightly load test, an SLO, a manual review), declare it as VERIFIED-IN even if it does not exist yet", name).At(path))
 		}
 	}
 	return findings

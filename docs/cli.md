@@ -77,7 +77,7 @@ openrecord map                            → decisions, specs
 openrecord map --for decisions            → the components
 openrecord map --for decisions/api        → api's concerns
 openrecord map --for decisions/api/data   → subgroups and loose records
-openrecord map --for specs                → the four types
+openrecord map --for specs                → the five types
 openrecord map --for specs/flow           → subgroups and loose capabilities
 openrecord map --for specs/flow/checkout  → the subgroup's capabilities
 ```
@@ -243,7 +243,7 @@ openrecord level add specs/flow/checkout       --title "…" --description "…"
 | Level | Where its prose comes from | `source` |
 | --- | --- | --- |
 | A concern the catalogue knows | The shipped catalogue | `catalogue` |
-| One of the four spec types | The binary — the types are the format, not a project's choice | `shipped` |
+| One of the five spec types | The binary — the types are the format, not a project's choice | `shipped` |
 | A concern the catalogue does not have, or **any subgroup** | You, via `--title` and `--description` | `given` |
 
 A subgroup never has a default and never will: it is named for whatever its records share, and that is
@@ -280,9 +280,18 @@ openrecord record write decisions/api/security/rate-limiting.md \
 Both halves are validated: the frontmatter against what the store requires (fields present, every
 component declared), and the body against the type's template. Each spec type requires its own
 structural section — `flow` requires `## Main flow`; `lifecycle` requires `## States and transitions`;
-`process` requires `## Trigger` and `## Main flow`; `rule` requires none of its own — plus branch anchors
-pointing at steps that exist and transition lines in the fixed shape. Every other type section
-(`## Branches`, `## Edge cases`, `## Errors facing the actor`, `## Rule`) stays allowed but optional.
+`process` requires `## Trigger` and `## Main flow`; `rule` and `quality` require none of their own —
+plus branch anchors pointing at steps that exist and transition lines in the fixed shape. Every other
+type section (`## Branches`, `## Edge cases`, `## Errors facing the actor`, `## Rule`) stays allowed but
+optional; a `quality` spec allows none at all beyond the core (see
+[capability-spec.md](capability-spec.md#the-quality-type)).
+
+**`--qualifies`**, repeatable, is a `quality` spec's only type-specific flag: a functional spec's path,
+optionally followed by `#anchor` (`specs/flow/upload-file.md#successful-upload`). It is validated the
+same way `--components` is — against what already exists — with its own codes: `qualifies-not-found`
+(the target spec, or the anchor inside it, does not exist), `qualifies-not-functional` (the target is
+itself a `quality` spec), and `qualifies-not-quality` (`--qualifies` was used on a spec that is not
+`quality`).
 
 **If anything fails, nothing is written.** The command returns the same `code` and `severity` findings
 `validate` returns, so there is one vocabulary for what is wrong with a record regardless of when you
@@ -389,8 +398,14 @@ disappeared).
 | `empty-components` | error | A spec with no components. |
 | `branch-anchor-not-found` | error | A branch anchored to a step its flow does not have. |
 | `duplicate-anchor` | error | Two scenarios, two transitions, or a scenario and a transition, that produce the same anchor. |
-| `malformed-scenario` | error | A scenario missing GIVEN/WHEN/THEN. |
+| `malformed-scenario` | error | A scenario missing GIVEN/WHEN/THEN, or — on a `quality` spec — MEASURE. |
 | `empty-anchor` | error | A scenario name, or a state in a transition, with no letters or digits — so it has no anchor at all. |
+| `verified-in-invalid` | error | A `VERIFIED-IN` value outside `pre-release`, `production`, `manual`. |
+| `verified-in-not-quality` | error | A `VERIFIED-IN` line on a scenario that is not in a `quality` spec. |
+| `qualifies-not-found` | error | `qualifies` names a spec file that does not exist. |
+| `qualifies-anchor-not-found` | error | `qualifies` names an anchor that is not among the target spec's anchors. |
+| `qualifies-not-functional` | error | `qualifies` points at another `quality` spec instead of a functional one. |
+| `qualifies-not-quality` | error | `qualifies` is declared on a spec that is not `quality`. |
 | `invalid-frontmatter` | error | Frontmatter absent or malformed. |
 | `body-hash-missing` | error | A record's frontmatter has no `body-hash` field. |
 | `body-hash-mismatch` | error | A `body-hash` is well-formed but does not match the body — the body drifted outside the tool. |
@@ -400,6 +415,7 @@ disappeared).
 | `component-path-missing` | warning | A declared directory that is not in the repository — silent drift. |
 | `unreachable-state` / `dead-end-state` | warning | A state with no way in, or no way out. A design bug nobody sees today. |
 | `concern-too-flat` | warning | Many loose records in one concern: a subgroup is missing. |
+| `quality-unverified` | warning | A `quality` scenario with no `VERIFIED-IN` line, and no check or sandbox covering it either — nothing says it is verified anywhere. |
 
 ### Exit code
 

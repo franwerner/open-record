@@ -18,16 +18,17 @@ import (
 // a block inside the command so that help lists exactly what the command parses.
 type recordWriteOptions struct {
 	title, description, status, bodyFile *string
-	components                           *repeated
+	components, qualifies                *repeated
 }
 
 func recordWriteFlags(flags *flag.FlagSet) *recordWriteOptions {
-	options := &recordWriteOptions{components: &repeated{}}
+	options := &recordWriteOptions{components: &repeated{}, qualifies: &repeated{}}
 	options.title = flags.String("title", "", "the record's title")
 	options.description = flags.String("description", "", "the decision or behaviour in one line")
 	options.status = flags.String("status", string(store.Accepted), "accepted or pending")
 	options.bodyFile = flags.String("body-file", "", "file holding the body")
 	flags.Var(options.components, "components", "surfaces a spec reaches, repeatable — required for a spec")
+	flags.Var(options.qualifies, "qualifies", "a functional spec (or spec#anchor) this quality spec qualifies, repeatable — only on a quality spec")
 	return options
 }
 
@@ -41,6 +42,7 @@ func runRecordWrite(env Env, args []string) error {
 	title, description := options.title, options.description
 	status, bodyFile := options.status, options.bodyFile
 	components := *options.components
+	qualifies := *options.qualifies
 	target, err := oneArgument("record write", subject, "a path inside the store")
 	if err != nil {
 		return err
@@ -81,6 +83,7 @@ func runRecordWrite(env Env, args []string) error {
 		Description: *description,
 		Status:      store.Status(*status),
 		Components:  components,
+		Qualifies:   qualifies,
 		Body:        string(body),
 	}
 	record.BodyHash = store.BodyHash(record.Body)
@@ -90,7 +93,7 @@ func runRecordWrite(env Env, args []string) error {
 	if err != nil {
 		return err
 	}
-	findings := check.Sorted(check.Record(rendered, coordinate, declared, relative))
+	findings := check.Sorted(check.Record(rendered, coordinate, declared, env.Repo, relative))
 	// Only an error stops the write. A warning is maintenance — a state with no
 	// way out, a level growing flat — and refusing to record something over one
 	// would make the store harder to keep than to abandon.
@@ -115,17 +118,18 @@ var sectionPattern = regexp.MustCompile(`(?m)^##\s+.+?\s*$`)
 
 type recordEditOptions struct {
 	section, bodyFile, title, description, status *string
-	components                                    *repeated
+	components, qualifies                         *repeated
 }
 
 func recordEditFlags(flags *flag.FlagSet) *recordEditOptions {
-	options := &recordEditOptions{components: &repeated{}}
+	options := &recordEditOptions{components: &repeated{}, qualifies: &repeated{}}
 	options.section = flags.String("section", "", "the heading to replace, e.g. \"## Alternatives\"")
 	options.bodyFile = flags.String("body-file", "", "file holding the new section contents")
 	options.title = flags.String("title", "", "replace the title")
 	options.description = flags.String("description", "", "replace the description")
 	options.status = flags.String("status", "", "replace the status")
 	flags.Var(options.components, "components", "replace the surfaces a spec reaches")
+	flags.Var(options.qualifies, "qualifies", "replace the functional spec(s) this quality spec qualifies")
 	return options
 }
 
@@ -139,6 +143,7 @@ func runRecordEdit(env Env, args []string) error {
 	section, bodyFile := options.section, options.bodyFile
 	title, description, status := options.title, options.description, options.status
 	components := *options.components
+	qualifies := *options.qualifies
 	target, err := oneArgument("record edit", subject, "a path inside the store")
 	if err != nil {
 		return err
@@ -199,6 +204,9 @@ func runRecordEdit(env Env, args []string) error {
 	if len(components) > 0 {
 		existing.Components = components
 	}
+	if len(qualifies) > 0 {
+		existing.Qualifies = qualifies
+	}
 
 	existing.BodyHash = store.BodyHash(existing.Body)
 	rendered := store.RenderRecord(existing, coordinate.Kind)
@@ -208,7 +216,7 @@ func runRecordEdit(env Env, args []string) error {
 	}
 	// Revalidation is over the whole file: a new ## Branches can break an anchor
 	// against a ## Main flow it never touched.
-	found := check.Sorted(check.Record(rendered, coordinate, declared, relative))
+	found := check.Sorted(check.Record(rendered, coordinate, declared, env.Repo, relative))
 	if finding.HasError(found) {
 		return writeRejected(env, "edited", relative, found)
 	}

@@ -42,12 +42,12 @@ gateway, not in each handler"*.
 
 | Axis | What it says | Source |
 | --- | --- | --- |
-| `type` | Which of the four kinds of behaviour this is. | Fixed set, carried by the path. |
+| `type` | Which of the five kinds of behaviour this is. | Fixed set, carried by the path. |
 | `subgroup` | Optional. Groups capabilities around the thing they act on (`flow/checkout/`, `lifecycle/orders/`). | Created by the project. **One level only** — never nested. |
 
 There is no `concern` axis here, and no component folder — see below.
 
-### The four types
+### The five types
 
 | Type | What it holds |
 | --- | --- |
@@ -55,13 +55,20 @@ There is no `concern` axis here, and no component folder — see below.
 | `rule` | A cross-cutting rule with no flow of its own. |
 | `lifecycle` | An entity's state machine — which states exist and what moves between them. |
 | `process` | Reactive or background work, triggered by an event rather than by an actor. |
+| `quality` | A quality attribute of behaviour the other four types already describe — a percentile, a load or a measurement window, never a plain per-case yes or no. |
 
 `flow` is the type that grows: in a mid-sized product it reaches dozens of capabilities, which is why
 subgroups exist here at all.
 
+The first four describe **functional** behaviour: what the system does, answerable yes or no for any
+concrete case. `quality` is the odd one out — it does not describe a new shape of behaviour, it
+characterizes behaviour the other four already describe, which is why it has no sections of its own
+(see ["By type"](#by-type) below) and why it is documented in its own section,
+["The `quality` type"](#the-quality-type), rather than folded into the table above.
+
 #### Picking between them
 
-The definitions are not enough when the case is ambiguous, and three crossings come up constantly:
+The definitions are not enough when the case is ambiguous, and four crossings come up constantly:
 
 - **`flow` vs `process`** — it is not decided by whether it runs in the background. It is decided by
   **what triggers it**: an actor → `flow`; an event → `process`. A signup triggered by a webhook is a
@@ -71,6 +78,12 @@ The definitions are not enough when the case is ambiguous, and three crossings c
   numbered steps, it is a flow.
 - **`rule` vs an edge case** — if it applies to **one** flow, it is a `## Edge cases` entry inside that
   flow. If it applies to several, it is a `rule` of its own.
+- **a functional type vs `quality`** — try to write the scenario's `THEN` as a plain fact about one
+  concrete case: *"the upload is confirmed"* is functional, no matter how fast or slow it was. The
+  moment the `THEN` needs a percentile, a load or a time window to mean anything — *"the upload is
+  confirmed in under 10 seconds at the p95"* — it is `quality`, and it belongs in its own spec,
+  `qualifies`-linked to the functional one, never mixed into that functional spec's own `## Edge cases`
+  or `## Scenarios`.
 
 ### Specs cross components
 
@@ -113,6 +126,36 @@ This line is the *only* thing the component axis does inside a spec. It is not a
 store: the store always lives at the repository root, and nothing under a component owns records of
 its own.
 
+### `qualifies`
+
+**Optional, and only on a `quality` spec.** It links a `quality` spec to the one or more functional
+specs it characterizes — a `flow`, `rule`, `lifecycle` or `process`, whole or by anchor:
+
+```yaml
+qualifies: [specs/flow/upload-file.md#successful-upload]
+```
+
+- **Whole-file, not per scenario.** It governs the whole record. A `quality` spec with two scenarios
+  qualifying two different functional behaviours is two mistakes away from clarity — write two separate
+  `quality` specs instead.
+- **Omitted when the quality attribute is not about one functional behaviour** but about a global
+  property of the system — *"99.9% availability"*, *"WCAG AA across the whole interface"*. A `quality`
+  spec with no `qualifies` carries only `components`, exactly like one that has it.
+- **A different relation from a decision's "serves" link.** The two are named differently on purpose,
+  so a report walking a record's neighbourhood never confuses a spec characterizing a behaviour with a
+  decision serving one.
+- **Validated.** `record write`, `record edit` and `validate` all check it:
+
+  | Situation | Code |
+  | --- | --- |
+  | The target spec file does not exist | `qualifies-not-found` |
+  | The target exists, but the given anchor is not among its anchors | `qualifies-anchor-not-found` |
+  | The target is itself a `quality` spec — `qualifies` must point at a functional one | `qualifies-not-functional` |
+  | `qualifies` is declared on a spec that is not `quality` | `qualifies-not-quality` |
+
+  All four are errors: a `qualifies` link that resolves to nothing is not a record worth keeping until
+  someone notices.
+
 ## Body
 
 A small fixed core, plus the sections the type asks for. The type is what makes the format ask the
@@ -144,8 +187,11 @@ edge case has at least one:
 | `rule` | — | `## Rule` — the invariant, with concrete values |
 | `lifecycle` | `## States and transitions` | — |
 | `process` | `## Trigger` · `## Main flow` | `## Edge cases` |
+| `quality` | — | — |
 
-An absent required section is reported as `missing-section`; an absent optional one is not.
+An absent required section is reported as `missing-section`; an absent optional one is not. `quality`
+adds no section of its own — see ["The `quality` type"](#the-quality-type) below — so any section
+outside `## Purpose` and `## Scenarios` on a `quality` spec is reported as `unexpected-section`.
 
 - **`## Main flow`** — the happy path, numbered. Each step is one observable action.
 - **`## Branches`** — each fork off the happy path, anchored to the step it forks from:
@@ -162,6 +208,67 @@ An absent required section is reported as `missing-section`; an absent optional 
   transition gets written anyway.
 - **`## Trigger`** — what event starts this. A process is defined by being triggered by an event rather
   than an actor, so this is the fact that constitutes it.
+
+### The `quality` type
+
+A `quality` scenario has no numbered steps, no branches, no states — it rides on the behaviour a
+functional spec already describes, via `qualifies`, and asks only how *well* that behaviour has to
+hold. Its scenario shape is the common one plus one extra, mandatory field:
+
+```markdown
+### Scenario: <name>
+
+- **GIVEN** <initial state>
+- **WHEN** <action>
+- **THEN** <expected observable outcome>
+- **MEASURE** <the percentile, load or window that gives THEN a sense>
+```
+
+`MEASURE` is why the type exists: *"the upload completes"* is already true or false per case, but *"p95
+< 10 seconds"* is only ever true over many cases. A `quality` scenario missing `MEASURE` (or any of
+`GIVEN`/`WHEN`/`THEN`) is `malformed-scenario`, the same code a functional spec gets for the same
+problem.
+
+**Anchors follow the shared rule, with no special-cased identifier.** Earlier drafts of this type
+considered a `[Q1]`, `[Q2]`... numbering scheme of its own, parallel to a `## Branches` step number.
+That was dropped: a `quality` scenario is still a `### Scenario: <name>`, slugged exactly like any
+other (see ["Anchors"](#anchors) below), sharing the one anchor namespace every other spec already
+shares. One rule for what an anchor is, regardless of which type is asking.
+
+#### `VERIFIED-IN`
+
+An optional, repeatable line after `MEASURE`, for a scenario no deterministic check or sandbox can
+cover — only a `quality` spec may carry it. It declares **how the scenario is meant to be verified**,
+not that the verification already exists: a record is the desired state, written when the scenario is
+defined, usually before the load test or the dashboard it names has been built. The gap between the
+two is what reporting (`impact`, `plan`) surfaces, not something to hold the line back for:
+
+```markdown
+- **VERIFIED-IN** <value> — <where to look>
+```
+
+| Value | When | Examples |
+| --- | --- | --- |
+| `pre-release` | Before the change reaches users, automatically (CI, a staging environment) | A nightly load test, Lighthouse on every PR, chaos testing in staging |
+| `production` | Against the real system with real users | An SLO on an observability dashboard, a field metric |
+| `manual` | A person, by hand | A usability test, a screen-reader review |
+
+A value outside those three is `verified-in-invalid`. The free text after the em dash says **where** to
+look; the binary never reads it, and never follows it: reading a CI result or a dashboard from an
+unsupervised agent would put credentials outside the sandbox within its reach. `VERIFIED-IN` on anything
+other than a `quality` spec is `verified-in-not-quality`: a performance note hiding inside a functional
+scenario is exactly the mixing this type exists to prevent.
+
+A `quality` scenario with no `VERIFIED-IN` line at all gets the warning `quality-unverified` — it is not
+an error, because `record write`/`record edit` still produce a usable record, but it is the real alarm:
+nobody has said how this scenario is verified. When the person has said how (a nightly load test in
+CI, an SLO, a manual review), write that as `VERIFIED-IN` even if it does not exist yet. Today `VERIFIED-IN` is the *only* way to clear it. Two
+more sources will exist once they land: a **check** (issue 09) covering the scenario with `enforces`,
+and a **sandbox** (issue 11) approximating it in local with `approximates`. Neither is implemented yet.
+
+**Note on `docs/concerns.md`.** The catalogue today asks about performance objectives as if they were
+a decision. That question's performance half belongs here instead — a `quality` spec, not a decision —
+but moving it is tracked separately (issue 07) and is not part of this document's change.
 
 ### Anchors
 
@@ -236,6 +343,7 @@ diagram — you run the command.
 | `process` | `flowchart`, starting from the trigger |
 | `lifecycle` | `stateDiagram-v2` |
 | `rule` | Nothing. An invariant is not a drawing. |
+| `quality` | Nothing. A measurement is not a drawing either. |
 
 **`flowchart`, not `sequenceDiagram`.** A sequence diagram needs every step to declare who talks to
 whom, which would both turn `## Main flow` into a form and force each step to name internal components

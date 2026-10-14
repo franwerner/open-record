@@ -92,6 +92,17 @@ construction, and it belongs in a decision if it belongs anywhere.
 
 Same number, two records, neither duplicating the other.
 
+### When the THEN needs a percentile, not a yes or no
+
+*"Uploading a 50 MB file takes under 10 seconds."* Still question 1, but the GIVEN/WHEN/THEN test above
+comes out "it depends" instead of a clean yes: whether it holds needs a percentile, a load or a
+measurement window, not one run. That is a `quality` spec, not a `flow`/`rule`/`lifecycle`/`process`
+one and not a decision either — write it with `qualifies: [specs/flow/upload-file.md#successful-upload]`
+linking it to the functional spec it characterizes, a `MEASURE` line stating the target (`p95 <
+10s`), and — when the person said how it is measured — a `VERIFIED-IN` line saying so
+(`VERIFIED-IN pre-release — nightly load test in CI`). It declares the intended verification, so write
+it even if that test does not exist yet; leaving it out is what raises `quality-unverified`.
+
 ## Did it settle anything at all?
 
 For question 2, three traits must all hold. Miss one and there is no record:
