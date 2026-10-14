@@ -30,6 +30,11 @@ EOF
 One or more `prompt` blocks, sent in order within ONE Claude session (the first via `claude -p`,
 later ones via `--resume <session_id>`).
 
+If the scenario expects the agent to write a record, add a last prompt confirming it ("Looks right — go
+ahead and write it."). The shipped skills ask the person to confirm before writing, so an agent may
+stop at a proposal; nobody answers in a headless run, and the scenario would fail on a run where the
+agent did exactly what its skills say. An agent that already wrote it just says so.
+
 ```prompt
 [...]
 ```
