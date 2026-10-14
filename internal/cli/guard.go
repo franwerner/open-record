@@ -1,8 +1,7 @@
 // guard.go implements the `--guard` flag on `skills --emit`: it merges
 // Claude-Code-specific protection into the project's `.claude/settings.json`
 // so writes to `.openrecord/` (and to `.claude/` itself) only ever happen
-// through this binary — see docs/cli.md#--guard and
-// implementar/03-escritura-solo-por-binario.md.
+// through this binary — see docs/cli.md#--guard.
 //
 // Three layers, all described on
 // https://code.claude.com/docs/en/settings, https://code.claude.com/docs/en/sandboxing,

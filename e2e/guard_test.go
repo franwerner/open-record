@@ -1,4 +1,4 @@
-// The Claude-Code-only write guard (implementar/03-escritura-solo-por-binario.md):
+// The Claude-Code-only write guard (task 03):
 // `openrecord hook check` decides a PreToolUse tool call's allow/deny, and
 // `openrecord skills --emit <dir> --guard` merges the permissions, sandbox
 // and PreToolUse hook configuration into the project's .claude/settings.json.

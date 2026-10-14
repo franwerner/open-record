@@ -2,7 +2,7 @@
 
 ## Task
 
-`implementar/02-hash-de-integridad-en-registros-json.md` asked for an integrity `hash` on every JSON
+Task 02 asked for an integrity `hash` on every JSON
 file the binary writes inside `.openrecord/`, starting with `components.json`. Settled and already
 implemented (see `docs/decision-record.md` "### `hash` — the same mechanism, for JSON files",
 `internal/store/integrity.go`, `internal/cli/component.go`):

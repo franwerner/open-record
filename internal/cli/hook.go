@@ -1,6 +1,6 @@
 // hook.go implements `openrecord hook check` — the message layer behind the
 // Claude Code PreToolUse hook that `skills --emit ... --guard` installs (see
-// docs/cli.md#hook and implementar/03-escritura-solo-por-binario.md).
+// docs/cli.md#hook).
 //
 // The real barrier against an agent writing `.openrecord/` directly is the
 // process sandbox and the Edit/Write permission deny rules the same `--guard`
@@ -14,9 +14,7 @@
 // Two things are explicitly out of scope here: blocking a config file edit or
 // a `record write`/`record edit` while an implementation run is in progress.
 // Both depend on state this binary does not have yet (`checks.json` and a
-// run's `run.json`), tracked by issues 09 and 15 — see
-// implementar/03-escritura-solo-por-binario.md "Bloqueos que solo aplican
-// durante una ejecución".
+// run's `run.json`), tracked by issues 09 and 15.
 package cli
 
 import (

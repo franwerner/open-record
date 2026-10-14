@@ -1,4 +1,4 @@
-// JSON integrity (implementar/02-hash-de-integridad-en-registros-json.md),
+// JSON integrity (task 02),
 // proved against the built binary and the realistic fixture: components.json
 // carries a `hash` stamped by `component add`/`component remove`, `validate`
 // reports a missing or mismatching one, and a writer refuses to rewrite a

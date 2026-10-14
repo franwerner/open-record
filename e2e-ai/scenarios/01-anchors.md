@@ -2,7 +2,7 @@
 
 ## Task
 
-`implementar/01-anclas-por-nombre.md` asked for name-derived anchors on specs, so a scenario or a
+Task 01 asked for name-derived anchors on specs, so a scenario or a
 lifecycle transition can be referenced by a stable slug instead of a brittle heading path. Settled
 and already implemented (see `docs/capability-spec.md` "### Anchors", `internal/check/anchor.go`,
 `internal/check/slug.go`):

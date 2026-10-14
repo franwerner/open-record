@@ -2,7 +2,7 @@
 
 ## Task
 
-`implementar/03-escritura-solo-por-binario.md` asked for a mechanical barrier, specific to Claude Code,
+Task 03 asked for a mechanical barrier, specific to Claude Code,
 that keeps writes to `.openrecord/` (and to the agent's own `.claude/` configuration) going only through
 `openrecord` itself — never a direct `Edit`/`Write` tool call, never a hand-written shell command. Settled
 and already implemented (see `docs/cli.md` "`--guard`" and "`hook`", `internal/cli/guard.go`,
