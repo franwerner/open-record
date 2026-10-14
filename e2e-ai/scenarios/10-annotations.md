@@ -259,3 +259,5 @@ PY
 - (none yet)
 
 - 2026-10-14: PASS — checked: 5/5  judged: 4/4. Run 20261014T174232Z-10-annotations. 2.1.296 (Claude Code) as orlab.
+
+- 2026-10-14: PASS — checked: 5/5  judged: 4/4. Run 20261014T175154Z-10-annotations, rebuilt through check.sh so the capture skill carried the annotation rule. 2.1.296 (Claude Code) as orlab.
