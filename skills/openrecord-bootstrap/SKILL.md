@@ -74,6 +74,11 @@ with `openrecord check add <id> --command "<command>" --justified-by <this decis
 <record-or-coordinate>]`. Never choose the tool yourself, and never put a `pre-release`, `production` or
 `manual` verification into `checks.json` — that stays in the record's own prose or `VERIFIED-IN`.
 
+**If checking this decision needs the system running, or real volume** — a test asserting the decision
+through a live environment, a review against real output — register how it is brought up and torn down
+with `openrecord sandbox add <id> --description "<what it's for>" --observes <this decision> ...`. Same
+rule: register what the person describes, never pick the tool yourself.
+
 ## Behaviour is a different interview
 
 Capability specs are not decisions and the questions are not the same. For behaviour, ask what the
@@ -102,6 +107,12 @@ claim typically lands. Suggest a verification approach if the person hasn't name
 tool for them. If it lands `on-change` or `pre-merge` and the person already named the concrete tool,
 register it with `openrecord check add` (see the decision interview above); never for a `pre-release`,
 `production` or `manual` verification — that stays a `VERIFIED-IN` line or the record's own prose.
+
+A `quality` scenario's threshold is the one exception worth registering even though it lands
+`pre-release`: if the person describes a local load test for it, register the environment with
+`openrecord sandbox add <id> --description "<what it's for>" --approximates
+specs/quality/<name>.md#<anchor> ...` — never the load test itself in `checks.json`. It approximates
+the threshold (detects a regression, catches gross problems) and never certifies it.
 
 ### Actors come before the flows that need them
 

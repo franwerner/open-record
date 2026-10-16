@@ -46,7 +46,7 @@ func runDiagram(env Env, args []string) error {
 		return Errorf(finding.CodeUsage, "read %s: %v", relative, err)
 	}
 	record, findings := store.ParseRecord(raw, store.Specs, relative)
-	findings = append(findings, check.Body(record.Body, store.Specs, specType, relative)...)
+	findings = append(findings, check.Body(record.Body, store.Specs, specType, relative, env.Repo)...)
 	// A spec that does not hold together produces a diagram that quietly lies,
 	// so it fails with the same finding validate would give.
 	if finding.HasError(findings) {

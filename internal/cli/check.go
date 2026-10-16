@@ -10,8 +10,8 @@ import (
 )
 
 type checkAddOptions struct {
-	command, justifiedBy *string
-	enforces, config     *repeated
+	command, justifiedBy, needs *string
+	enforces, config            *repeated
 }
 
 func checkAddFlags(flags *flag.FlagSet) *checkAddOptions {
@@ -23,6 +23,8 @@ func checkAddFlags(flags *flag.FlagSet) *checkAddOptions {
 	flags.Var(options.enforces, "enforces",
 		"a record path or a store group coordinate this check is responsible for, repeatable")
 	flags.Var(options.config, "config", "a repository-relative configuration file this tool reads, repeatable")
+	options.needs = flags.String("needs", "",
+		"the id of the sandbox (sandbox.json) this check needs running before its command can produce anything")
 	return options
 }
 
@@ -41,6 +43,7 @@ func runCheckAdd(env Env, args []string) error {
 	justifiedBy := strings.TrimSpace(*options.justifiedBy)
 	enforces := []string(*options.enforces)
 	config := []string(*options.config)
+	needs := strings.TrimSpace(*options.needs)
 
 	if command == "" {
 		return Errorf(finding.CodeUsage, "check add needs --command: a check with nothing to run verifies nothing")
@@ -69,7 +72,7 @@ func runCheckAdd(env Env, args []string) error {
 			"%q is already declared; there is no `check edit` — remove it with `openrecord check remove` and add it again", id)
 	}
 
-	item := store.Check{ID: id, Command: command, JustifiedBy: justifiedBy, Enforces: enforces, Config: config}
+	item := store.Check{ID: id, Command: command, JustifiedBy: justifiedBy, Enforces: enforces, Config: config, Needs: needs}
 	// The same relational validation validate runs over every entry
 	// already in checks.json, run once more here before this one is
 	// ever written — a missing or non-decision justified-by, a dangling
@@ -90,6 +93,7 @@ func runCheckAdd(env Env, args []string) error {
 		"justified_by": justifiedBy,
 		"enforces":     []string(enforces),
 		"config":       []string(config),
+		"needs":        needs,
 		"on_change":    store.OnChange(command),
 	})
 }

@@ -69,7 +69,7 @@ var commands = []*Command{
 			{
 				Name:    "add",
 				Summary: "Declare a check: a command, the decision that justifies it, and what it enforces.",
-				Usage:   "openrecord check add ID --command CMD --justified-by PATH [--enforces PATH-OR-COORDINATE] [--config PATH]",
+				Usage:   "openrecord check add ID --command CMD --justified-by PATH [--enforces PATH-OR-COORDINATE] [--config PATH] [--needs SANDBOX-ID]",
 				Flags:   describes(checkAddFlags),
 				Run:     runCheckAdd,
 			},
@@ -78,6 +78,34 @@ var commands = []*Command{
 				Summary: "Remove a check.",
 				Usage:   "openrecord check remove ID",
 				Run:     runCheckRemove,
+			},
+		},
+	},
+	{
+		Name:    "sandbox",
+		Summary: "Declare, edit and remove sandboxes — task 11's registry of how to bring up an environment to observe the system running.",
+		Sub: []*Command{
+			{
+				Name:    "add",
+				Summary: "Declare a sandbox: how to bring up an environment, and how to know it is ready, read its output and tear it down.",
+				Usage: "openrecord sandbox add ID --description TEXT [--component ID] [--setup CMD] [--start CMD] " +
+					"--ready-http URL|--ready-log LINE [--ready-timeout DURATION] [--exercise CMD] [--approximates PATH#ANCHOR] " +
+					"[--observes PATH] --logs-source CMD [--logs-format FORMAT] --stop CMD",
+				Flags: describes(sandboxFlags),
+				Run:   runSandboxAdd,
+			},
+			{
+				Name:    "edit",
+				Summary: "Replace any field of a sandbox except its id.",
+				Usage:   "openrecord sandbox edit ID [the same flags sandbox add takes]",
+				Flags:   describes(sandboxFlags),
+				Run:     runSandboxEdit,
+			},
+			{
+				Name:    "remove",
+				Summary: "Remove a sandbox, when no check still needs it.",
+				Usage:   "openrecord sandbox remove ID",
+				Run:     runSandboxRemove,
 			},
 		},
 	},

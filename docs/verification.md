@@ -48,7 +48,7 @@ command's `checks.json` entry carries `{files}` rather than naming a fifth value
 | --- | --- | --- |
 | `on-change` | A check run on the files a change touched | A `checks.json` command with `{files}` |
 | `pre-merge` | A check over the whole project, before it integrates | A `checks.json` command with no `{files}` |
-| `pre-release` | An automated measurement against a non-real environment, before users reach the change | Not a check at all today — a load test, Lighthouse on a preview, a staging scan, a periodic dependency audit |
+| `pre-release` | An automated measurement against a non-real environment, before users reach the change | Not a check at all today — a load test, Lighthouse on a preview, a staging scan, a periodic dependency audit. A sandbox (task 11) running locally, `approximates`-linked, is one way to run that load test on a developer's own machine — it detects a regression and catches gross problems, but it never certifies the number that landing `pre-release` would usually imply: see [decision-record.md](decision-record.md#sandbox) |
 | `production` | Measured against the real system, with real users | An SLO or a field metric; not a check `checks.json` runs |
 | `manual` | A person looks, by hand | Never a check: `checks.json` only holds what code can verify. A `quality` spec says it with `VERIFIED-IN manual`; a decision or a functional spec says how it is reviewed in its own prose |
 

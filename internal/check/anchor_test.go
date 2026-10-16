@@ -75,7 +75,7 @@ func TestTwoScenariosCollideWhenTheyDifferOnlyInCaseOrPunctuation(t *testing.T) 
 	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n" +
 		"### Scenario: Pending Payment\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n\n" +
 		"### Scenario: pending, payment!\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
-	got := codes(Body(body, store.Specs, "flow", "x.md"))
+	got := codes(Body(body, store.Specs, "flow", "x.md", ""))
 	if !got[finding.CodeDuplicateAnchor] {
 		t.Errorf("two scenarios producing the same anchor were accepted: %v", got)
 	}
@@ -86,7 +86,7 @@ func TestTwoTransitionsCollideOnTheSameAnchor(t *testing.T) {
 		"- pending → paid (first)\n" +
 		"- Pending → Paid! (second)\n\n## Scenarios\n\n" +
 		"### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
-	got := codes(Body(body, store.Specs, "lifecycle", "x.md"))
+	got := codes(Body(body, store.Specs, "lifecycle", "x.md", ""))
 	if !got[finding.CodeDuplicateAnchor] {
 		t.Errorf("two transitions producing the same anchor were accepted: %v", got)
 	}
@@ -98,7 +98,7 @@ func TestAScenarioAndATransitionCollideOnTheSameAnchor(t *testing.T) {
 	body := "## Purpose\n\nx\n\n## States and transitions\n\n" +
 		"- pending → paid (confirmed)\n\n## Scenarios\n\n" +
 		"### Scenario: Pending To Paid\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
-	got := codes(Body(body, store.Specs, "lifecycle", "x.md"))
+	got := codes(Body(body, store.Specs, "lifecycle", "x.md", ""))
 	if !got[finding.CodeDuplicateAnchor] {
 		t.Errorf("a scenario colliding with a transition anchor was accepted: %v", got)
 	}
@@ -110,7 +110,7 @@ func TestDistinctNamesNeverFalselyCollide(t *testing.T) {
 		"- pending → cancelled (abandoned)\n\n## Scenarios\n\n" +
 		"### Scenario: paid in full\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n\n" +
 		"### Scenario: cancelled by the buyer\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
-	got := codes(Body(body, store.Specs, "lifecycle", "x.md"))
+	got := codes(Body(body, store.Specs, "lifecycle", "x.md", ""))
 	if got[finding.CodeDuplicateAnchor] {
 		t.Errorf("distinct names were reported as colliding: %v", got)
 	}
@@ -121,7 +121,7 @@ func TestAnEmptyAnchorIsReported(t *testing.T) {
 	// to.
 	body := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n" +
 		"### Scenario: !!!\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
-	got := codes(Body(body, store.Specs, "flow", "x.md"))
+	got := codes(Body(body, store.Specs, "flow", "x.md", ""))
 	if !got[finding.CodeEmptyAnchor] {
 		t.Errorf("a scenario name with no anchor was accepted: %v", got)
 	}

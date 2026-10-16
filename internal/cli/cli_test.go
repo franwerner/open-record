@@ -170,6 +170,7 @@ func TestEveryCommandThatParsesFlagsDeclaresThem(t *testing.T) {
 		"jev status":       true,
 		"review open":      true,
 		"review status":    true,
+		"sandbox remove":   true,
 		"verification":     true,
 		"version":          true,
 	}

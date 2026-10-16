@@ -178,6 +178,9 @@ func decideWritePath(raw string) (bool, string) {
 	if rel == store.ChecksFile {
 		return true, "`" + store.ChecksFile + "` is written only by `openrecord check add` / `openrecord check remove`."
 	}
+	if rel == store.SandboxFile {
+		return true, "`" + store.SandboxFile + "` is written only by `openrecord sandbox add` / `openrecord sandbox edit` / `openrecord sandbox remove`."
+	}
 	if filepath.Base(rel) == store.IndexFile {
 		return true, "`" + store.IndexFile + "` is written only by `openrecord level add` (a component's own index comes from `openrecord component add`)."
 	}

@@ -205,8 +205,8 @@ checkout`, typically), never to force a re-stamp.
 Every JSON file the binary writes inside `.openrecord/` carries the same idea as `body-hash`, under the
 field name `hash`: a SHA-256 hex digest the binary stamps on write and `validate` checks on read, so a
 hand-edit to a JSON file is just as detectable as a hand-edit to a record's body. `components.json` is
-the first file to carry it; `actors.json`, `checks.json`, `sandbox.json`, and the files under
-`implementation/` and `runs/` adopt it unchanged as the issues that introduce them land
+the first file to carry it; `actors.json`, `checks.json` and `sandbox.json` carry it unchanged, and the
+files under `implementation/` and `runs/` adopt it the same way as the issues that introduce them land
 (`internal/store/integrity.go` is the one implementation every one of them reuses).
 
 **The formula**, defined once here so no later issue has to invent it again:
@@ -378,6 +378,40 @@ the tool's own entry names the decision instead. See [cli.md](cli.md#check) for 
 - The binary only ever reads `checks.json` to report on it — `map`, `validate`, `check add`/`check
   remove`. Nothing in this binary shells out to run a check's command; which checks actually run, and
   when, stays the implementing flow's or the project's own CI's job, never this format's.
+
+## The sandbox registry: why `sandbox`, not `observability` or `runtime` {#sandbox}
+
+Task 11 adds a third registry next to `components.json`, `actors.json` and `checks.json`:
+`sandbox.json` declares how to bring up an environment to observe the system running — never a thing
+this binary brings up, exercises or tears down itself, only the commands that would. See
+[cli.md](cli.md#sandbox) for the full shape.
+
+**Why not `observability.json`, or `runtime.json`.** Both names were considered and dropped for the
+same reason task 04 dissolved the `quality` concern: one word cannot mean two things in the vocabulary
+an agent reads off this store. `observability` and `runtime` are both already names of a **concern** —
+a folder a project's own decisions file under (`decisions/<component>/observability/...`,
+`decisions/<component>/runtime/...`), holding what was *decided* about logging, tracing, graceful
+shutdown and the like. A registry sharing that name would leave an agent unable to tell, from the name
+alone, whether `runtime.json` was this environment-bringup registry or somehow a dump of every
+`runtime` decision. `sandbox` names what the thing actually is instead: a disposable, local stand-in
+for the real system, never staging or production, and not a concern any project would plausibly use for
+its own decisions.
+
+This mirrors the checks registry's own split above: `checks.json` maps a command to what justifies and
+scopes it, never the decision itself; `sandbox.json` maps an environment's bring-up instructions to what
+it is *for* — the check that `needs` it, the quality scenario it `approximates`, the decision it
+`observes` — never the environment itself, which stays whatever the project already runs (Docker
+Compose, a bare process, anything). Three uses, one registry, because all three are the same thing
+underneath: an environment running long enough to produce real output, read by a person or an agent
+rather than reduced to a pass/fail.
+
+**`approximates` is an approximation, never a certification.** A load test run against a sandbox
+detects a regression against the previous run on the same machine, and catches gross problems — N+1
+queries, a missing index, a memory leak — but it never stands in for the real number a `quality`
+scenario's `MEASURE` names: the machine competes for CPU with everything else running on it, there is
+no real network, and the dataset is small. The exact threshold is either `VERIFIED-IN` (something
+checked outside this repository) or not yet known; a sandbox only ever says "the trend held" or "it
+got worse."
 
 ## Verifying a record: `@record:<path>[#<anchor>]` {#annotations}
 

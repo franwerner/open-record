@@ -165,6 +165,14 @@ statistical in `checks.json` — a `pre-release`, `production` or `manual` verif
 person has to look at, stays out of the registry and is said in the record's own prose or `VERIFIED-IN`
 line instead.
 
+**If the person describes an environment to bring up and observe** — a check that needs the system
+running, a local load test, a way to review a decision against real output — register it with
+`openrecord sandbox add <id> --description "<what it's for>" ...` (`openrecord sandbox edit`/`sandbox
+remove` after). A local load test **approximates** a `quality` scenario's threshold (`--approximates
+specs/quality/<name>.md#<anchor>`): it detects a regression against the previous run, never certifies
+the number, and it never goes in `checks.json` either way. Same rule as above: register what the person
+describes, never pick the tool (Docker Compose, a bare process, whatever they already run) yourself.
+
 **A test, rule, config or script that verifies a record names it in a comment:**
 `@record:<path>#<anchor>` for one scenario or transition, `@record:<path>` for a whole rule spec or
 decision. Take the anchor from openrecord — the `anchors` a write or edit reports, or the spec itself —

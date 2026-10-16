@@ -110,6 +110,25 @@ func TestCheckEntryEnforces(t *testing.T) {
 	})
 }
 
+func TestCheckEntryNeeds(t *testing.T) {
+	t.Run("an existing sandbox is accepted", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPISandbox(t, repo, "api")
+		item := store.Check{ID: "c", Command: "x", Needs: "api"}
+		if got := codes(CheckEntry(repo, item, store.ChecksFile)); got[finding.CodeCheckNeedsNotFound] {
+			t.Errorf("a valid needs target was rejected: %v", got)
+		}
+	})
+
+	t.Run("a nonexistent sandbox is rejected", func(t *testing.T) {
+		repo := t.TempDir()
+		item := store.Check{ID: "c", Command: "x", Needs: "does-not-exist"}
+		if got := codes(CheckEntry(repo, item, store.ChecksFile)); !got[finding.CodeCheckNeedsNotFound] {
+			t.Errorf("a nonexistent needs target was accepted: %v", got)
+		}
+	})
+}
+
 func TestCheckEntryConfig(t *testing.T) {
 	t.Run("an existing file is accepted", func(t *testing.T) {
 		repo := t.TempDir()

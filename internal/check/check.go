@@ -45,7 +45,7 @@ func Record(raw []byte, coordinate store.Coordinate, declared store.Components, 
 	if coordinate.Kind == store.Specs && coordinate.Depth() > 0 {
 		specType = coordinate.Segments[0]
 	}
-	findings = append(findings, Body(record.Body, coordinate.Kind, specType, path)...)
+	findings = append(findings, Body(record.Body, coordinate.Kind, specType, path, repo)...)
 	findings = append(findings, checkQualifies(record, coordinate, repo, path)...)
 	findings = append(findings, checkServes(record, coordinate, repo, path)...)
 	findings = append(findings, checkDependsOn(record, coordinate, repo, path)...)
@@ -108,6 +108,26 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 		findings = append(findings, store.VerifyChecks(repo, checks)...)
 		for _, item := range checks.Checks {
 			findings = append(findings, CheckEntry(repo, item, store.ChecksFile)...)
+		}
+	}
+
+	sandboxes, err := store.LoadSandboxes(repo)
+	if err != nil {
+		if !store.IsSandboxesUndeclared(err) {
+			if item, ok := err.(finding.Finding); ok {
+				findings = append(findings, item)
+			} else {
+				return nil, err
+			}
+		}
+		// An undeclared sandbox.json is benign on its own, the same as
+		// actors.json and checks.json above — nothing requires a sandbox
+		// to exist.
+	} else {
+		findings = append(findings, sandboxes.Validate()...)
+		findings = append(findings, store.VerifySandboxes(repo, sandboxes)...)
+		for _, item := range sandboxes.Sandboxes {
+			findings = append(findings, SandboxEntry(repo, item, store.SandboxFile)...)
 		}
 	}
 

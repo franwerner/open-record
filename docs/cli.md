@@ -355,7 +355,20 @@ openrecord check add arch-layers \
 ```
 
 `--command` and `--justified-by` are required, and the command fails without either. `--enforces` and
-`--config` are each optional and repeatable.
+`--config` are each optional and repeatable. `--needs` is optional and single-valued: the id of a
+sandbox (`sandbox.json`, [below](#sandbox)) that has to be running before `--command` can produce
+anything — typically an end-to-end or an integration test:
+
+```
+openrecord check add e2e-api \
+  --command "go test ./e2e/..." \
+  --justified-by decisions/api/delivery/testing-strategy.md \
+  --needs api
+```
+
+It must name a sandbox already declared in `sandbox.json`; a nonexistent one is
+`check-needs-not-found`. The binary never starts, exercises or stops that sandbox itself — `needs` only
+records that this check depends on it, see [`#sandbox`](#sandbox) for who actually does.
 
 **`--justified-by`** is the one decision that justifies running this tool at all, so no entry floats
 with no origin — the same principle `serves` and `depends-on` already follow for a decision's own
@@ -426,12 +439,123 @@ meeting what was decided.
 ### Validations
 
 Every control above has a stable code, listed with the rest of `validate`'s findings in the codes table
-below (`check-duplicate` through `check-config-not-found`). `validate` reports the same findings against
-`checks.json` as it already sits on disk — a `justified-by` whose decision disappeared or stopped being
-a decision, an `enforces` group emptied out, or a `config` file that no longer exists are all breakage,
-not just an add-time refusal, and `config` existence is re-checked at `validate` time for exactly that
-reason: a config file going missing later is no safer to leave unnoticed than a decision disappearing
-later is.
+below (`check-duplicate` through `check-config-not-found`, plus `check-needs-not-found`). `validate`
+reports the same findings against `checks.json` as it already sits on disk — a `justified-by` whose
+decision disappeared or stopped being a decision, an `enforces` group emptied out, a `config` file that
+no longer exists, or a `needs` sandbox that disappeared are all breakage, not just an add-time refusal,
+and `config`/`needs` existence is re-checked at `validate` time for exactly that reason: a config file
+or a sandbox going missing later is no safer to leave unnoticed than a decision disappearing later is.
+
+---
+
+## `sandbox` {#sandbox}
+
+Task 11's registry: `sandbox.json` declares **how to bring up an environment to observe the system
+running**, never a thing the binary itself brings up, exercises or tears down — it only records the
+commands a person or an agent (or a `checks.json` entry through `needs`) runs. See
+[decision-record.md](decision-record.md#sandbox) for why this registry is named `sandbox` and not
+`observability` or `runtime`.
+
+A test can pass while the real output of the system shows something is wrong — a swallowed error, a
+recovered panic, a retry storm, a repeated or slow query, a timeout. No exit code catches that; it
+takes watching the system run, under real traffic, and reading what it produces. `sandbox.json` is
+what makes that reviewable: three uses, any number of sandboxes, each with its own `description` so a
+reader (or an agent) picks the right one without guessing:
+
+| Use | Field |
+| --- | --- |
+| The environment a `checks.json` check needs running (an e2e, an integration test) | `needs` on the check |
+| A load test approximating a `quality` scenario's threshold, locally | `approximates` |
+| Reviewing a decision against real output, with volume | `observes` |
+
+### `sandbox add`
+
+```
+openrecord sandbox add api \
+  --description "API with its database, to run the e2e suite and watch it work." \
+  --component api \
+  --setup "docker compose up -d" \
+  --ready-http http://localhost:8080/health --ready-timeout 60 \
+  --exercise "./scripts/smoke-api.sh" \
+  --logs-source "docker compose logs api" --logs-format json \
+  --stop "docker compose down -v"
+```
+
+`--description` is required — the same principle as every other registry's description: a sandbox
+nobody described does not tell a reader what it is for. Required too: exactly one of `--ready-http`
+(a URL that answers once it is up) or `--ready-log` (a line to wait for in its output); `--logs-source`,
+where its output is read; and `--stop`, how to tear it down. At least one of `--setup` or `--start` is
+required — nothing brings a sandbox up otherwise.
+
+**`--ready-timeout` and `--logs-format` are optional**, defaulting to `60` (seconds) and `text`: left
+out, the command writes the default into `sandbox.json` explicitly rather than leaving the field
+absent, so the file always states what applies and a later reader never has to know the default by
+heart. `ready.timeout` is always a whole number of seconds — never a duration string like `60s` — and
+given, it has to be a positive integer: zero, a negative number, and anything that is not an integer at
+all are all `sandbox-ready-timeout-invalid`. `--logs-format`, given, has to be one of `json`/`text`
+(`sandbox-logs-format-invalid` otherwise).
+
+`--component` (repeatable) must each already be declared in `components.json`. `--setup` and
+`--exercise` are repeatable commands; `--start` is single-valued, for when `--setup` does not already
+bring everything up on its own (`docker compose up` commonly does).
+
+**`--exercise`** is optional and deliberately not a check: whether it "passes" is never judged, only
+the output it produces. A sandbox just brought up barely writes anything worth reading; `--exercise`
+is what makes it do real work — a smoke script, a load test — so there is something to look at. Keep
+it a fixed command: a new failure is then attributable to the change, not to a different path taken
+run to run. When a sandbox comes up because a `checks.json` check names it with `needs`, that check's
+own command already generates traffic and `--exercise` can be left out.
+
+**`--approximates`** (repeatable) links a load sandbox to the `quality` scenario it approximates:
+`specs/quality/<name>.md#<anchor>`, the anchor required (unlike `qualifies`, a sandbox approximates
+one scenario at a time, never a whole spec). The target must exist, must itself be a `quality` spec,
+and the anchor must be one of its scenarios — `sandbox-approximates-not-found`,
+`sandbox-approximates-not-quality`, `sandbox-approximates-anchor-not-found`. It **detects a
+regression against the previous run on the same machine** (2s before, 6s now) and catches gross
+problems (N+1 queries, a missing index, a leak) — it never **certifies** the scenario's exact
+threshold: there is no real network, the data is small, and the machine competes for CPU with
+everything else running on it. See [decision-record.md](decision-record.md#sandbox) and
+[capability-spec.md](capability-spec.md#VERIFIED-IN) for how this clears `quality-unverified`.
+
+**`--observes`** (repeatable) names decisions this sandbox's output is judged against — a path to a
+decision, never a spec and never an anchor. It must exist and must be a decision —
+`sandbox-observes-not-found`, `sandbox-observes-not-decision`. Use it for a rule that only shows up
+under real volume ("no query takes more than 50ms with the test dataset"); a rule a command can check
+deterministically belongs in `checks.json` instead, never here.
+
+Creates `sandbox.json` if it is absent, with the format version and the same integrity `hash` every
+other `.openrecord/` JSON file carries (see [decision-record.md](decision-record.md#hash)); refuses
+instead of writing — file untouched — when an existing `sandbox.json` cannot be trusted, the same way
+`check add` refuses over a tampered `checks.json`. Refused, too, when the id is already declared.
+
+### `sandbox edit`
+
+```
+openrecord sandbox edit api --setup "docker compose -f compose.v2.yaml up -d"
+```
+
+Replaces whatever flag is given, on top of the existing entry — the id itself is immutable, and every
+other field may change. A repeatable flag given at all (one or more times) **replaces the whole list**,
+never appends to it — passing `--setup` once replaces every existing setup command. `--ready-http` and
+`--ready-log` are handled together: giving either one replaces the whole ready condition and clears the
+other side, so switching from one to the other never has to fight the "exactly one" rule `sandbox add`
+enforces. The same validation `sandbox add` runs applies to the edited entry before it lands.
+
+### `sandbox remove`
+
+```
+openrecord sandbox remove api
+```
+
+Refuses while some `checks.json` entry's `needs` still names it, and lists which — the same principle
+`actor remove`/`component remove` already follow for what still references them. Like every `sandbox`
+command, it refuses before touching the file when `sandbox.json` cannot be trusted.
+
+### Validations
+
+Every control above has a stable code, listed with the rest of `validate`'s findings in the codes table
+below (`sandbox-duplicate` through `sandbox-observes-not-decision`). `validate` reports the same
+findings against `sandbox.json` as it already sits on disk.
 
 ---
 
@@ -596,9 +720,9 @@ openrecord validate --for decisions/api    → api and everything below it
 ``` It never judges whether a record is *honest* or still true of the
 code — that is reading, not linting.
 
-This walk covers `components.json`, `actors.json` and `checks.json`, records and indexes — everything
-that sits next to the store proper, plus `sandbox.json` and `implementation/` as later issues introduce
-them. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
+This walk covers `components.json`, `actors.json`, `checks.json` and `sandbox.json`, records and
+indexes — everything that sits next to the store proper, plus `implementation/` as a later issue
+introduces it. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
 not part of the coordinate this walk covers by default, so an old or corrupt run never blocks a
 `validate` over records that have nothing to do with it. The binary still stamps and can check their
 `hash` (see [decision-record.md](decision-record.md#hash)), just through the execution's own commands
@@ -690,10 +814,28 @@ disappeared).
 | `check-enforces-not-found` | error | `enforces` names a record or a coordinate that does not exist. |
 | `check-enforces-empty-group` | error | `enforces` names a group coordinate with nothing filed in it. |
 | `check-config-not-found` | error | A `config` file that does not exist in the repository. |
+| `check-needs-not-found` | error | `needs` names a sandbox that is not declared in `sandbox.json`. |
 | `checks-undeclared` | error | Something needs a check and `checks.json` does not exist yet. |
 | `checks-unreadable` | error | `checks.json` exists but cannot be parsed. |
 | `annotation-record-not-found` | error | An `@record:<path>` annotation (task 10) names a path that is not a record in the store. |
 | `annotation-anchor-not-found` | error | An `@record:<path>#<anchor>` annotation names an anchor the target record does not have. |
+| `sandbox-duplicate` | error | An `id` declared more than once in `sandbox.json`. |
+| `sandbox-without-description` | error | A sandbox with no `description`. |
+| `sandbox-without-setup-or-start` | error | A sandbox with neither `setup` nor `start`: nothing brings it up. |
+| `sandbox-ready-missing` | error | A sandbox with neither `ready.http` nor `ready.log`. |
+| `sandbox-ready-ambiguous` | error | A sandbox declaring both `ready.http` and `ready.log`. |
+| `sandbox-ready-timeout-invalid` | error | A sandbox's `ready.timeout` is present but is not a positive whole number of seconds. |
+| `sandbox-logs-missing` | error | A sandbox with no `logs.source`. |
+| `sandbox-logs-format-invalid` | error | A sandbox's `logs.format` is present but is not one of `json`/`text`. |
+| `sandbox-stop-missing` | error | A sandbox with no `stop`. |
+| `sandbox-undeclared-component` | error | A sandbox's `components` names one not declared in `components.json`. |
+| `sandbox-approximates-not-found` | error | `approximates` names a spec, or an anchor on it, that does not exist — or carries no `#anchor` at all. |
+| `sandbox-approximates-not-quality` | error | `approximates` points at a spec that is not `quality`. |
+| `sandbox-approximates-anchor-not-found` | error | `approximates` names an anchor that is not among the target quality spec's scenarios. |
+| `sandbox-observes-not-found` | error | `observes` names a record that does not exist. |
+| `sandbox-observes-not-decision` | error | `observes` names a record that is not a decision. |
+| `sandbox-undeclared` | error | Something needs a sandbox and `sandbox.json` does not exist yet. |
+| `sandbox-unreadable` | error | `sandbox.json` exists but cannot be parsed. |
 
 ### Exit code
 
@@ -1009,6 +1151,7 @@ or, allowing:
 | `Edit`/`Write`/`NotebookEdit` on `.openrecord/components.json` | deny | `component add` / `component remove` |
 | `Edit`/`Write`/`NotebookEdit` on `.openrecord/actors.json` | deny | `actor add` / `actor edit` / `actor remove` |
 | `Edit`/`Write`/`NotebookEdit` on `.openrecord/checks.json` | deny | `check add` / `check remove` |
+| `Edit`/`Write`/`NotebookEdit` on `.openrecord/sandbox.json` | deny | `sandbox add` / `sandbox edit` / `sandbox remove` |
 | `Edit`/`Write`/`NotebookEdit` on a record under `decisions/` or `specs/` | deny | `record write` / `record edit` |
 | `Edit`/`Write`/`NotebookEdit` on an `INDEX.md` | deny | `level add` (or `component add` for a component's own index) |
 | `Edit`/`Write`/`NotebookEdit` on anything else under `.openrecord/` | deny | the matching command, generically |

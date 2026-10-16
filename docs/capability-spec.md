@@ -296,9 +296,20 @@ scenario is exactly the mixing this type exists to prevent.
 A `quality` scenario with no `VERIFIED-IN` line at all gets the warning `quality-unverified` — it is not
 an error, because `record write`/`record edit` still produce a usable record, but it is the real alarm:
 nobody has said how this scenario is verified. When the person has said how (a nightly load test in
-CI, an SLO, a manual review), write that as `VERIFIED-IN` even if it does not exist yet. Today `VERIFIED-IN` is the *only* way to clear it. Two
-more sources will exist once they land: a **check** (issue 09) covering the scenario with `enforces`,
-and a **sandbox** (issue 11) approximating it in local with `approximates`. Neither is implemented yet.
+CI, an SLO, a manual review), write that as `VERIFIED-IN` even if it does not exist yet.
+
+`VERIFIED-IN` is one of **three** ways to clear it, none of which replace the other two — each answers
+a different "how is this checked":
+
+| Source | Clears it when | Means |
+| --- | --- | --- |
+| `VERIFIED-IN` | The scenario's own frontmatter line | A target outside this repository: `pre-release`, `production`, `manual` |
+| A check's `enforces` | The check (`checks.json`, [cli.md](cli.md#check)) names this quality spec whole, or a group it is filed under | A deterministic command verifies the whole spec — every scenario in it, this one included |
+| A sandbox's `approximates` | A sandbox (`sandbox.json`, [cli.md](cli.md#sandbox)) names this exact scenario, `specs/quality/<name>.md#<anchor>` | A load test approximates this one scenario locally — a regression detector, never a certification of the exact threshold |
+
+The first is written by hand, stating intent even before the measurement it names exists; the other
+two are read off whatever `checks.json`/`sandbox.json` already declare, so a check or a sandbox added
+later clears the warning on the next `validate` without touching the spec at all.
 
 Not sure what to write, or what a given attribute's `VERIFIED-IN` usually looks like? `openrecord
 verification <attribute>` (for example `openrecord verification latency`) says what the scenario needs

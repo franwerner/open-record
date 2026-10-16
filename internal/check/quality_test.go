@@ -21,15 +21,54 @@ func qualityScenario(verifiedIn string) string {
 	return body
 }
 
+// quality-unverified clearing (task 11): a sandbox's approximates or a
+// check's enforces each clear the warning without a VERIFIED-IN line,
+// exercised through Body (not just SandboxEntry/qualityCoverage directly)
+// since that is the actual path `record write`/`record edit`/`validate`
+// take.
+func TestQualityUnverifiedClearedBySandboxApproximates(t *testing.T) {
+	repo := t.TempDir()
+	declareAPISandbox(t, repo, "api-load", "specs/quality/x.md#upload-of-a-large-file")
+	got := codes(Body(qualityScenario(""), store.Specs, "quality", "specs/quality/x.md", repo))
+	if got[finding.CodeQualityUnverified] {
+		t.Errorf("quality-unverified still reported despite a sandbox approximating it: %v", got)
+	}
+}
+
+func TestQualityUnverifiedClearedByCheckEnforces(t *testing.T) {
+	repo := t.TempDir()
+	declareAPIComponent(t, repo)
+	writeDecision(t, repo, "decisions/api/delivery/ci.md", "accepted")
+	checks := store.Checks{Checks: []store.Check{{
+		ID: "gate", Command: "go test ./...", JustifiedBy: "decisions/api/delivery/ci.md",
+		Enforces: []string{"specs/quality/x.md"},
+	}}}
+	if err := checks.Save(repo); err != nil {
+		t.Fatal(err)
+	}
+	got := codes(Body(qualityScenario(""), store.Specs, "quality", "specs/quality/x.md", repo))
+	if got[finding.CodeQualityUnverified] {
+		t.Errorf("quality-unverified still reported despite a check enforcing the whole spec: %v", got)
+	}
+}
+
+func TestQualityUnverifiedStillReportedWithoutCoverage(t *testing.T) {
+	repo := t.TempDir()
+	got := codes(Body(qualityScenario(""), store.Specs, "quality", "specs/quality/x.md", repo))
+	if !got[finding.CodeQualityUnverified] {
+		t.Errorf("quality-unverified not reported when nothing covers the scenario: %v", got)
+	}
+}
+
 func TestQualityScenarioRequiresMeasure(t *testing.T) {
 	body := "## Purpose\n\nx\n\n## Scenarios\n\n### Scenario: s\n\n- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
-	got := codes(Body(body, store.Specs, "quality", "x.md"))
+	got := codes(Body(body, store.Specs, "quality", "x.md", ""))
 	if !got[finding.CodeMalformedScenario] {
 		t.Errorf("a quality scenario with no MEASURE was accepted: %v", got)
 	}
 
 	complete := qualityScenario("pre-release — nightly load test")
-	got = codes(Body(complete, store.Specs, "quality", "x.md"))
+	got = codes(Body(complete, store.Specs, "quality", "x.md", ""))
 	if got[finding.CodeMalformedScenario] {
 		t.Errorf("a complete MEASURE/VERIFIED-IN scenario was rejected: %v", got)
 	}
@@ -37,7 +76,7 @@ func TestQualityScenarioRequiresMeasure(t *testing.T) {
 
 func TestQualitySpecAllowsOnlyTheCoreSections(t *testing.T) {
 	body := qualityScenario("pre-release — nightly load test") + "\n## Main flow\n\n1. x\n"
-	got := codes(Body(body, store.Specs, "quality", "x.md"))
+	got := codes(Body(body, store.Specs, "quality", "x.md", ""))
 	if !got[finding.CodeUnexpectedSection] {
 		t.Errorf("a quality spec accepted a section outside Purpose/Scenarios: %v", got)
 	}
@@ -46,7 +85,7 @@ func TestQualitySpecAllowsOnlyTheCoreSections(t *testing.T) {
 func TestVerifiedInOutsideQualityIsRejected(t *testing.T) {
 	body := "## Purpose\n\nx\n\n## Rule\n\nAt most 60 per minute.\n\n## Scenarios\n\n### Scenario: over\n\n" +
 		"- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n- **VERIFIED-IN** manual — a person checked\n"
-	got := codes(Body(body, store.Specs, "rule", "x.md"))
+	got := codes(Body(body, store.Specs, "rule", "x.md", ""))
 	if !got[finding.CodeVerifiedInNotQuality] {
 		t.Errorf("VERIFIED-IN on a rule spec was accepted: %v", got)
 	}
@@ -55,31 +94,31 @@ func TestVerifiedInOutsideQualityIsRejected(t *testing.T) {
 func TestVerifiedInValueIsValidated(t *testing.T) {
 	for _, value := range []string{"pre-release", "production", "manual"} {
 		t.Run(value+" is accepted", func(t *testing.T) {
-			got := codes(Body(qualityScenario(value+" — somewhere"), store.Specs, "quality", "x.md"))
+			got := codes(Body(qualityScenario(value+" — somewhere"), store.Specs, "quality", "x.md", ""))
 			if got[finding.CodeVerifiedInInvalid] {
 				t.Errorf("%q was rejected: %v", value, got)
 			}
 		})
 	}
-	got := codes(Body(qualityScenario("staging — somewhere"), store.Specs, "quality", "x.md"))
+	got := codes(Body(qualityScenario("staging — somewhere"), store.Specs, "quality", "x.md", ""))
 	if !got[finding.CodeVerifiedInInvalid] {
 		t.Errorf("an out-of-domain VERIFIED-IN value was accepted: %v", got)
 	}
 }
 
 func TestQualityUnverifiedWarnsOnlyWithoutVerifiedIn(t *testing.T) {
-	got := codes(Body(qualityScenario(""), store.Specs, "quality", "x.md"))
+	got := codes(Body(qualityScenario(""), store.Specs, "quality", "x.md", ""))
 	if !got[finding.CodeQualityUnverified] {
 		t.Errorf("a quality scenario with no VERIFIED-IN line was not warned about: %v", got)
 	}
 
-	for _, item := range Body(qualityScenario(""), store.Specs, "quality", "x.md") {
+	for _, item := range Body(qualityScenario(""), store.Specs, "quality", "x.md", "") {
 		if item.Code == finding.CodeQualityUnverified && item.Severity != finding.Warning {
 			t.Errorf("quality-unverified is severity %q, want a warning", item.Severity)
 		}
 	}
 
-	got = codes(Body(qualityScenario("production — the SLO dashboard"), store.Specs, "quality", "x.md"))
+	got = codes(Body(qualityScenario("production — the SLO dashboard"), store.Specs, "quality", "x.md", ""))
 	if got[finding.CodeQualityUnverified] {
 		t.Errorf("a VERIFIED-IN line did not clear the warning: %v", got)
 	}

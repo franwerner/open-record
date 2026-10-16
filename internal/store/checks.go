@@ -24,10 +24,6 @@ const ChecksFile = Root + "/checks.json"
 // enough to run on every change; its absence means it runs over the whole
 // project and is reserved for closing a task. See docs/cli.md#check for the
 // rule this encodes and why a separate field would only restate it.
-//
-// There is also no `needs` field — a later task's sandbox is what a check
-// needing a running system would declare, deliberately deferred rather than
-// stubbed here.
 type Check struct {
 	ID      string `json:"id"`
 	Command string `json:"command"`
@@ -45,6 +41,11 @@ type Check struct {
 	// Config is optional: the tool's own configuration files, repository-
 	// relative. Each one must exist.
 	Config []string `json:"config,omitempty"`
+	// Needs is optional: the id of the sandbox.json (task 11) sandbox this
+	// check needs running before Command can produce anything — an e2e or
+	// an integration test, typically. At most one: a check runs one
+	// command against one environment.
+	Needs string `json:"needs,omitempty"`
 }
 
 // Checks is the declaration as a whole — same shape as Actors and

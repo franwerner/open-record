@@ -2,6 +2,7 @@ package check
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -32,7 +33,23 @@ func CheckEntry(repo string, item store.Check, path string) []finding.Finding {
 	for _, cfg := range item.Config {
 		findings = append(findings, checkConfigTarget(repo, cfg, path)...)
 	}
+	if strings.TrimSpace(item.Needs) != "" {
+		findings = append(findings, checkNeedsTarget(repo, item.Needs, path)...)
+	}
 	return findings
+}
+
+// checkNeedsTarget validates a check's `needs`: the id of the sandbox
+// (task 11) that has to be running before `command` can produce anything.
+// It only has to exist — sandbox.json's own Validate/SandboxEntry already
+// cover whether that sandbox is itself well-formed.
+func checkNeedsTarget(repo, id, path string) []finding.Finding {
+	sandboxes, err := store.LoadSandboxes(repo)
+	if err != nil || !sandboxes.Has(id) {
+		return []finding.Finding{finding.Errorf(finding.CodeCheckNeedsNotFound,
+			"needs %q does not name a declared sandbox", id).At(path)}
+	}
+	return nil
 }
 
 // checkJustifiedByTarget validates a check's justified-by: a whole-file
@@ -101,6 +118,39 @@ func checkEnforcesTarget(repo, ref string, path string) []finding.Finding {
 			"enforces %q resolves to zero records", ref).At(path)}
 	}
 	return nil
+}
+
+// enforcesCoversPath reports whether one `enforces` entry — a whole record
+// path or a group coordinate, same two shapes checkEnforcesTarget resolves —
+// covers target, a quality spec's own store-relative path. Used by
+// qualityCoverage (internal/check/sandbox.go) to clear `quality-unverified`
+// on every scenario in a quality spec a check enforces whole, never a
+// parallel resolver: a whole-file match is a direct comparison, and a
+// coordinate is walked with the identical store.Walk checkEnforcesTarget
+// already uses to recurse one.
+func enforcesCoversPath(repo, ref, target string) bool {
+	cleaned := strings.TrimSpace(ref)
+	if strings.HasSuffix(cleaned, ".md") {
+		coordinate, slug, ok := resolveStoreFile(cleaned)
+		if !ok {
+			return false
+		}
+		return path.Join(coordinate.String(), slug+".md") == target
+	}
+	coordinate, err := store.ParseCoordinate(cleaned)
+	if err != nil {
+		return false
+	}
+	files, _, err := store.Walk(repo, coordinate)
+	if err != nil {
+		return false
+	}
+	for _, file := range files {
+		if !file.IsIndex && file.Path == target {
+			return true
+		}
+	}
+	return false
 }
 
 // checkConfigTarget validates one `config` entry: a plain repository-

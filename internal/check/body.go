@@ -58,7 +58,13 @@ var (
 var verifiedInValues = map[string]bool{"pre-release": true, "production": true, "manual": true}
 
 // Body reports what is structurally wrong with a record's prose.
-func Body(body string, kind store.Kind, specType, path string) []finding.Finding {
+//
+// repo is needed only to clear `quality-unverified` on a `quality` spec: a
+// scenario a sandbox approximates, or that a check enforces, needs no
+// VERIFIED-IN line either (see checkScenarios and
+// internal/check/sandbox.go's qualityCoverage). Every other check here
+// looks at nothing but body itself.
+func Body(body string, kind store.Kind, specType, path, repo string) []finding.Finding {
 	sections := splitSections(body)
 
 	required := decisionSections
@@ -71,7 +77,7 @@ func Body(body string, kind store.Kind, specType, path string) []finding.Finding
 	findings := missingAndUnexpected(sections, required, allowed, kind, specType, path)
 	findings = append(findings, checkBranchAnchors(sections, path)...)
 	findings = append(findings, checkTransitions(sections, path)...)
-	findings = append(findings, checkScenarios(sections, specType, path)...)
+	findings = append(findings, checkScenarios(sections, specType, path, repo)...)
 	findings = append(findings, checkAnchors(body, path)...)
 	return findings
 }
@@ -201,7 +207,13 @@ func checkTransitions(sections map[string][]string, path string) []finding.Findi
 // a `quality` scenario: anywhere else it is reported rather than ignored,
 // because a performance note hiding inside a functional scenario is exactly
 // the mixing this type exists to prevent.
-func checkScenarios(sections map[string][]string, specType, path string) []finding.Finding {
+//
+// VERIFIED-IN is not the only way to clear `quality-unverified` any more
+// (task 11): a sandbox's `approximates` can cover one scenario by its
+// anchor, and a check's `enforces` can cover every scenario in the spec at
+// once, by naming the whole file or a group it is filed under. repo is
+// used, only for a `quality` spec, to look both up through qualityCoverage.
+func checkScenarios(sections map[string][]string, specType, path, repo string) []finding.Finding {
 	lines, present := sections["## Scenarios"]
 	if !present {
 		return nil
@@ -220,6 +232,11 @@ func checkScenarios(sections map[string][]string, specType, path string) []findi
 	keywords := []string{"GIVEN", "WHEN", "THEN"}
 	if quality {
 		keywords = append(keywords, "MEASURE")
+	}
+	var enforcedWhole bool
+	var approximated map[string]bool
+	if quality {
+		enforcedWhole, approximated = qualityCoverage(repo, path)
 	}
 
 	var findings []finding.Finding
@@ -250,7 +267,7 @@ func checkScenarios(sections map[string][]string, specType, path string) []findi
 					"scenario %q: VERIFIED-IN %q is not pre-release, production or manual", name, value).At(path))
 			}
 		}
-		if quality && verified == 0 {
+		if quality && verified == 0 && !enforcedWhole && !approximated[Slug(name)] {
 			findings = append(findings, finding.Warnf(finding.CodeQualityUnverified,
 				"scenario %q has no VERIFIED-IN line: nothing says how it is verified; if the person said how (a nightly load test, an SLO, a manual review), declare it as VERIFIED-IN even if it does not exist yet", name).At(path))
 		}
