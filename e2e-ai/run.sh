@@ -339,7 +339,9 @@ with open(transcript_path, encoding="utf-8") as f:
                 if isinstance(block, dict) and block.get("type") == "tool_result":
                     digest_lines.append(f"TOOL_RESULT: {trunc(block.get('content'))}")
         elif etype == "result":
-            digest_lines.append(f"FINAL_ANSWER: {trunc(event.get('result', ''), 2000)}")
+            # Never truncated: the final answer is what most judged criteria
+            # are about, and a cut one reads as an omission to the judge.
+            digest_lines.append(f"FINAL_ANSWER: {event.get('result', '')}")
 
 digest = "\n".join(digest_lines)
 judged = open(os.path.join(rundir, "judged.txt"), encoding="utf-8").read()
