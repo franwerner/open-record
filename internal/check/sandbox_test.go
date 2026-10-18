@@ -183,3 +183,72 @@ func TestQualityCoverage(t *testing.T) {
 		}
 	})
 }
+
+func TestApproximatingSandboxes(t *testing.T) {
+	t.Run("a sandbox approximating this exact anchor matches", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPISandbox(t, repo, "api-load", "specs/quality/upload-time.md#large-file-upload")
+		got, err := ApproximatingSandboxes(repo, "specs/quality/upload-time.md", "large-file-upload")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "api-load" {
+			t.Errorf("ApproximatingSandboxes = %+v", got)
+		}
+	})
+
+	t.Run("a different anchor on the same spec does not match", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPISandbox(t, repo, "api-load", "specs/quality/upload-time.md#large-file-upload")
+		got, err := ApproximatingSandboxes(repo, "specs/quality/upload-time.md", "some-other-anchor")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("ApproximatingSandboxes = %+v, want none", got)
+		}
+	})
+
+	t.Run("a different spec does not match", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPISandbox(t, repo, "api-load", "specs/quality/other.md#large-file-upload")
+		got, err := ApproximatingSandboxes(repo, "specs/quality/upload-time.md", "large-file-upload")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("ApproximatingSandboxes = %+v, want none", got)
+		}
+	})
+
+	t.Run("no sandbox.json at all reports nothing, not an error", func(t *testing.T) {
+		repo := t.TempDir()
+		got, err := ApproximatingSandboxes(repo, "specs/quality/upload-time.md", "large-file-upload")
+		if err != nil {
+			t.Fatalf("ApproximatingSandboxes returned an error with no sandbox.json: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("ApproximatingSandboxes = %+v, want none", got)
+		}
+	})
+
+	t.Run("matches are sorted by id", func(t *testing.T) {
+		repo := t.TempDir()
+		set := store.Sandboxes{Sandboxes: []store.Sandbox{
+			{ID: "z-sandbox", Description: "d", Setup: []string{"x"}, Ready: store.Ready{Http: "http://x", Timeout: 1},
+				Approximates: []string{"specs/quality/upload-time.md#large-file-upload"}, Logs: store.Logs{Source: "x"}, Stop: "x"},
+			{ID: "a-sandbox", Description: "d", Setup: []string{"x"}, Ready: store.Ready{Http: "http://x", Timeout: 1},
+				Approximates: []string{"specs/quality/upload-time.md#large-file-upload"}, Logs: store.Logs{Source: "x"}, Stop: "x"},
+		}}
+		if err := set.Save(repo); err != nil {
+			t.Fatal(err)
+		}
+		got, err := ApproximatingSandboxes(repo, "specs/quality/upload-time.md", "large-file-upload")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 2 || got[0].ID != "a-sandbox" || got[1].ID != "z-sandbox" {
+			t.Errorf("ApproximatingSandboxes = %+v, want a-sandbox before z-sandbox", got)
+		}
+	})
+}

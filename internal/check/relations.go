@@ -189,6 +189,30 @@ func findCycle(graph map[string][]string, start string) string {
 	return visit(start)
 }
 
+// ResolveRecordRef resolves a whole-file record reference — the same
+// shape `serves` and `depends-on` both use — to the canonical,
+// store-relative path store.Walk reports, or ok=false when it does not
+// resolve to one at all. Exposed for a caller, like `impact` (issue 12),
+// that needs to canonicalise a record's own declared references before
+// looking each one up, the same way checkServes/checkDependsOn already do
+// before validating them.
+func ResolveRecordRef(ref string) (recordPath string, ok bool) {
+	coordinate, slug, ok := resolveStoreFile(ref)
+	if !ok {
+		return "", false
+	}
+	return path.Join(coordinate.String(), slug+".md"), true
+}
+
+// DependsOnGraph returns every decision's depends-on edges, keyed by its
+// store-relative path — the exact graph checkDependsOn validates against.
+// Exposed for a caller that needs the graph itself rather than one target's
+// closure, like `impact` (issue 12), which walks it in both directions to
+// render a nested chain rather than a flat list.
+func DependsOnGraph(repo string) map[string][]string {
+	return dependsOnGraph(repo)
+}
+
 // Dependents returns every decision that depends on the one at target,
 // directly or transitively, sorted. It is the inverse of depends-on,
 // computed fresh from what is on disk rather than written anywhere, so it

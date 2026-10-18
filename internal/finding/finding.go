@@ -111,6 +111,11 @@ const (
 	CodeSandboxObservesNotFound           = "sandbox-observes-not-found"
 	CodeSandboxObservesNotDecision        = "sandbox-observes-not-decision"
 	CodeCheckNeedsNotFound                = "check-needs-not-found"
+	// CodeRecordNotFound is `impact`'s own usage error: the argument does
+	// not resolve to a record in the store, at all — a different problem
+	// from the store itself having something wrong, which is why cli.Run
+	// gives it the usage exit code rather than the generic failure one.
+	CodeRecordNotFound = "record-not-found"
 )
 
 // Finding is one thing wrong with one file.

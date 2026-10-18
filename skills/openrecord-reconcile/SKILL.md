@@ -113,20 +113,20 @@ the anchor's own component plus whatever the declared crossing named is a reason
 plainly in the report: a narrowed scope is a weaker coverage claim, and a reader relying on this check
 needs to know which one they got.
 
-**4. Declared relations — `serves` and `depends-on`.** When the anchor is a decision, its own
-frontmatter may already name the exact neighbours worth checking, with no search needed: every spec it
-`serves`, every decision it `depends-on`, and — read from the write/edit reply, not written anywhere —
-every decision in its `dependents`. These are the cheapest, most precise source there is, because they
-were validated by the binary rather than surfaced by wording or proximity. A `depends-on` pair is also
-the one place "broken dependency" (below) is handed to you directly: if the anchor's own status or
-substance just changed, everything in its `dependents` is a candidate worth a look, not just a
-possibility search might turn up.
+**4. Declared relations.** `openrecord impact <anchor>` returns every declared, validated link the
+anchor has in one call — `serves`, the full `depends-on` chain in both directions, `qualified_by`
+(which quality specs characterize it), and — on a flow or a process — the actors in `initiated-by` —
+so these are read off the store instead of assembled by hand from frontmatter and a write/edit reply.
+These are the cheapest, most precise source there is, because they were validated by the binary rather
+than surfaced by wording or proximity. The `depends-on` chain is also where "broken dependency" (below)
+is handed to you directly: if the anchor's own status or substance just changed, everything in
+`impact`'s `dependents` is a candidate worth a look, not just a possibility search might turn up.
 
-**A shared actor is another cheap, precise signal.** If the anchor's `initiated-by` names an actor, or
-its body mentions one with `@actor:<id>`, every other record mentioning that same id is worth a look —
-two records making different claims about what the same actor can do are exactly the kind of
-contradiction this skill exists to catch, and the mention is already validated, not a guess from
-wording.
+**A shared actor is another cheap, precise signal**, and `impact`'s `initiated_by` is where to start
+it: every other record mentioning that same actor id — in its own `initiated-by`, or with `@actor:<id>`
+in its body — is worth a look. Two records making different claims about what the same actor can do
+are exactly the kind of contradiction this skill exists to catch, and the actor id is already
+validated, not a guess from wording.
 
 Together, these four return five to fifteen records, not two hundred. That bound is the whole
 reason this skill is runnable at all — a person can read fifteen records against one anchor in one

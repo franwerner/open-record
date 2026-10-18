@@ -102,6 +102,16 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if _, quiet := runErr.(silentError); !quiet {
 			env.WriteFailure(runErr)
 		}
+		// finding.CodeRecordNotFound is the one command-level error that
+		// takes the usage exit code rather than the generic failure one:
+		// `impact`'s own argument did not name a record at all, which is
+		// the caller asking wrong — exactly the distinction exitUsage
+		// already draws above, pre-dispatch, extended here for the one
+		// code that needs it post-dispatch too. No other command returns
+		// this code, so every other command's exit code is unaffected.
+		if item, ok := runErr.(finding.Finding); ok && item.Code == finding.CodeRecordNotFound {
+			return exitUsage
+		}
 		return exitFailure
 	}
 	return exitOK

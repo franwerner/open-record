@@ -150,6 +150,12 @@ var commands = []*Command{
 		Run:     runValidate,
 	},
 	{
+		Name:    "impact",
+		Summary: "Report a record's full neighbourhood: what initiates it, qualifies it, serves and depends on it, verifies it, and how covered it is.",
+		Usage:   "openrecord impact PATH",
+		Run:     runImpact,
+	},
+	{
 		Name:    "grep",
 		Summary: "Literal search, scoped to a coordinate.",
 		Usage:   "openrecord grep TERM --for COORDINATE",

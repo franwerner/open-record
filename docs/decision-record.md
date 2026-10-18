@@ -326,8 +326,9 @@ its own; @actor:support can read but never change another user's data.
 ```
 
 This is often where an actor matters most: `authorization`-shaped decisions are usually *about* who can
-do what, and naming the actor the same way a spec does lets a later reader (or `openrecord impact`, once
-it exists) answer "what decisions talk about this actor?" without reading every record in the store.
+do what, and naming the actor the same way a spec does lets a later reader (or `openrecord impact`,
+[cli.md](cli.md#impact)) answer "what decisions talk about this actor?" without reading every record in
+the store.
 
 `@actor:<id>` is validated the same way here as in a spec: an id `actors.json` does not declare is
 `actor-mention-unknown`, and an actor's id or alias written in the open without the mention syntax is
@@ -496,10 +497,11 @@ broken annotation in the repository; `validate --for <coordinate>` reports only 
 falls inside that coordinate, because an annotation lives outside the store coordinate `--for` walks and
 has no other way to be scoped against it.
 
-**A scenario with no annotation naming it at all is never an error.** It is pending work, surfaced by
-`impact` (issue 12) and `plan` (issue 13) once they exist, never something `validate` blocks on — a
-record can be perfectly well-formed and completely unverified at the same time, and those are different
-facts. Two scenarios of the same spec producing the same anchor is already `duplicate-anchor` (see
+**A scenario with no annotation naming it at all is never an error.** It is pending work — `openrecord
+impact` ([cli.md](cli.md#impact)) reports it as an anchor with an empty `annotated_in`, and `plan`
+(issue 13, once it exists) will too — never something `validate` blocks on, because a record can be
+perfectly well-formed and completely unverified at the same time, and those are different facts. Two
+scenarios of the same spec producing the same anchor is already `duplicate-anchor` (see
 ["Anchors"](capability-spec.md#anchors)); it is not repeated as its own annotation code, because it
 would already break the cross before any annotation is even looked at.
 

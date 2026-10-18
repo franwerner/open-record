@@ -1,6 +1,6 @@
 ---
 name: openrecord-consult
-description: Find which durable records govern code before changing it. USE THIS SKILL before editing, adding, or refactoring any file in a project that has an `.openrecord/` store — before the first edit, not after. Also when asked what governs a file, what was decided about some area, whether an approach is allowed, or why the code is the way it is.
+description: Find which durable records govern code before changing it. USE THIS SKILL before editing, adding, or refactoring any file in a project that has an `.openrecord/` store — before the first edit, not after. Also when asked what governs a file, what was decided about some area, whether an approach is allowed, or why the code is the way it is. And before changing, retiring or re-evaluating a record itself — when asked what depends on a record, or what changing or replacing one would affect.
 ---
 
 # Consult the records before you write
@@ -19,6 +19,20 @@ project is missing records it never had, and do not offer to create a store beca
 absent.
 
 An empty store is a project that has not adopted this. That is a legitimate state, not a gap.
+
+## Before changing a record itself
+
+The walk below is for code. When what you are about to touch is a **record** — editing it, changing
+its status, retiring it — or when you are asked what depends on or is affected by one, skip the walk
+and ask the binary directly:
+
+```
+openrecord impact decisions/api/security/rate-limits/at-the-gateway.md
+```
+
+It follows every declared, validated link one hop — `qualifies`, `serves`, checks, annotations — and
+`depends-on` as a full chain in both directions, so what is affected is read off the store instead of
+guessed from memory or a search that cannot prove it found everything.
 
 ## The walk
 

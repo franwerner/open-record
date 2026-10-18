@@ -35,6 +35,7 @@ without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial re
 | `level` | Create a concern or subgroup folder with its index. |
 | `record` | Write and edit records. |
 | `validate` | Check a coordinate is well-formed, recursively. |
+| `impact` | Report a record's full neighbourhood: every declared, validated link one hop away, and the full `depends-on` chain. |
 | `grep` | Literal search, scoped to a store. |
 | `search` | Rank every scoped record against a context with Jev, and store the result for review. |
 | `diagram` | Emit a spec as Mermaid on stdout. |
@@ -842,6 +843,164 @@ disappeared).
 Non-zero when any finding is an `error`. The classification is for the agent; the exit code is for the
 pipeline, and the two do not get in each other's way — `validate` works as a CI gate and a pre-commit
 hook without a second mode.
+
+---
+
+## `impact`
+
+Before changing or adding a record, something has to know what else is connected to it: what initiates
+it, what qualifies it, what serves and depends on it, what verifies it, and how covered it is. `impact`
+answers that by following the links the store already declared and validated — `components`, `actors`,
+`qualifies`, `serves`, `depends-on`, `enforces`, `needs`, `@record:` annotations, `approximates`,
+`VERIFIED-IN` — never by searching text. What it returns is complete because it **follows relations**,
+not because a search happened to match.
+
+```
+openrecord impact decisions/api/data/postgres.md
+```
+
+```json
+{
+  "record": {
+    "path": "decisions/api/data/postgres.md",
+    "status": "accepted",
+    "description": "Account data is stored in Postgres."
+  },
+  "serves": [],
+  "depends_on": [],
+  "dependents": [
+    {
+      "path": "decisions/api/data/pgx.md",
+      "status": "accepted",
+      "description": "Database access goes through pgx, never database/sql.",
+      "dependents": [
+        {
+          "path": "decisions/api/data/atlas-migrations.md",
+          "status": "accepted",
+          "description": "Every schema change is an Atlas migration, applied in order.",
+          "dependents": []
+        }
+      ]
+    }
+  ],
+  "verified_by": [],
+  "annotations": { "whole_record": [] }
+}
+```
+
+### Every record listed carries only `path`, `status` and `description`
+
+Never the body. The consumers (`define`, changing a decision, `implement`) are an agent that has to
+choose what to open next — the `description` is what lets it skip opening everything, and `status`
+says what is `pending`: undecided, so it cannot be contradicted or broken, because nobody settled it
+yet.
+
+### Validate runs first, over the whole store
+
+A neighbourhood built on top of a store with an error anywhere is not trustworthy — the error may well
+be a decision this very record is served by. So `impact` runs `check.Store` (the same engine `validate`
+runs) over the **whole** store before building anything, not only the record's own corner of it:
+
+| Situation | What `impact` does |
+| --- | --- |
+| The argument does not name a record in the store | Usage error (`record-not-found`), exit 2 |
+| `validate` finds an `error` anywhere in the store | Refuses: exit 1, the same `findings` shape `validate` emits, no neighbourhood |
+| `validate` finds only `warning`s (`quality-unverified`, `unmarked-actor-mention`) | Does not block: the neighbourhood builds normally |
+| `checks.json` / `sandbox.json` / `actors.json` does not exist | A normal state, not an error — the corresponding section is just empty |
+
+A refused run reports only the raw argument and the findings, never a partial neighbourhood:
+
+```json
+{
+  "record": "specs/flow/sign-up.md",
+  "findings": [
+    { "code": "body-hash-mismatch", "severity": "error",
+      "path": "decisions/api/data/pgx.md", "message": "..." }
+  ]
+}
+```
+
+### Depth: one hop, except `depends-on`
+
+Every link stops at one hop — `qualified_by`, `qualifies`, `served_by`/`serves`, `verified_by`,
+`annotations` — because a second hop already drags in a large, unfocused slice of the store. The one
+exception is `depends-on`, followed as a **full chain**, in **both directions**, in separate fields:
+`depends_on` (what the record rests on, upward) and `dependents` (what rests on the record, downward —
+what has to be re-evaluated if it changes). `validate` forbids a cycle in `depends-on`, so the chain
+always terminates. Inside `served_by`, each serving decision carries its own `depends_on`/`dependents`
+chains — the one place a chain nests inside something other than the record `impact` was asked about.
+
+### Sections, by record type
+
+Every section has the same name and shape everywhere it appears; one that does not apply to the
+record's type is **omitted entirely** (the key is absent), never reported empty — an applicable section
+with nothing in it is an empty array or object instead.
+
+| Record | Sections |
+| --- | --- |
+| Functional spec (`flow`, `rule`, `lifecycle`, `process`) | `initiated_by` (only `flow`/`process`) · `qualified_by` · `served_by` (+ `depends_on`/`dependents` of each serving decision) · `verified_by` · `annotations` · `qualities` |
+| `quality` spec | `qualifies` · `served_by` (+ chains) · `verified_by` · `annotations` · `qualities` (its own scenarios) |
+| Decision | `serves` · `depends_on` · `dependents` · `verified_by` · `annotations` |
+
+**`initiated_by`** is every actor in `initiated-by`, resolved against `actors.json` — `{id, kind,
+description}`. A `lifecycle`, a `rule`, a `quality` spec and a decision never declare `initiated-by`, so
+the key is absent on them.
+
+**`qualified_by`** is every `quality` spec whose `qualifies` names this functional spec — the inverse of
+`qualifies`, computed fresh rather than written anywhere — each paired with which of this spec's anchors
+it qualifies: an empty list means the whole spec.
+
+**`qualifies`**, on a `quality` spec, is its own declared targets: the functional spec(s) it
+characterizes, each with the one anchor it names, when it names one.
+
+**`served_by`** is every decision whose `serves` names this spec — functional or `quality` alike — each
+carrying its own `depends_on`/`dependents` chains.
+
+**`serves`/`depends_on`/`dependents`**, on a decision, are its own three relational fields: the spec(s)
+it exists because of, and the full `depends-on` chain in both directions.
+
+**`verified_by`** is every check from `checks.json` whose `enforces` covers this record — whole file, or
+a group coordinate containing it — as `{id, command}` plus `needs` (a sandbox id) when the check
+declares one. The sandbox itself is never expanded; `needs` only names it.
+
+**`annotations`** is this record's `@record:` cross, from the same engine `validate`'s own annotation
+scan uses: `whole_record` is every annotation naming the record with no `#anchor` — the only kind a
+decision or an anchor-less spec can have — and `anchors` (present only when the record has at least one
+anchor) adds, per anchor, which annotations name it:
+
+```json
+"annotations": {
+  "whole_record": ["tests/signup.spec.ts:1"],
+  "anchors": [
+    { "anchor": "account-is-created", "annotated_in": ["tests/signup.spec.ts:2"] }
+  ]
+}
+```
+
+An annotation only **declares** what a test or a rule intends to verify — it is never evidence that the
+test passed, or even that it still exists.
+
+**`qualities`** is one entry per scenario anchor of every `quality` spec in `qualified_by` (or, on a
+`quality` spec itself, its own scenario anchors): `{anchor, checks, sandboxes, verified_in}` — `checks`
+is every check enforcing that `quality` spec whole, `sandboxes` is every sandbox whose `approximates`
+names that exact anchor, and `verified_in` is the scenario's own `VERIFIED-IN` value, when it declares
+one. All three empty or absent is the same state `quality-unverified` warns about: nobody has said how
+the scenario is verified at all.
+
+### What `impact` never follows
+
+Only **declared, validated** links — never "same folder" proximity. Two decisions filed side by side in
+the same concern are not a relation, and judging whether they conflict is semantic work for an agent
+(`openrecord-reconcile`, which already gets them from `openrecord map --for <folder>`), not something a
+deterministic command can decide.
+
+### Exit codes
+
+| Exit | Meaning |
+| --- | --- |
+| `0` | The neighbourhood was built — possibly with warnings earlier in `validate`'s own pass. |
+| `1` | `validate` found an `error` somewhere in the store; the findings are on stdout, no neighbourhood. |
+| `2` | The argument does not name a record in the store at all — a usage error, same as an unknown command. |
 
 ---
 

@@ -232,3 +232,95 @@ func TestQualifiesResolvesAgainstTheRepoOnDisk(t *testing.T) {
 		}
 	})
 }
+
+// writeQuality plants a well-formed `quality` spec directly on disk, with
+// the given qualifies list, for the QualifiedBy tests below — the inverse
+// direction writeSpec/qualityRecord already exercise from the functional
+// spec's side.
+func writeQuality(t *testing.T, repo, relative string, qualifies ...string) {
+	t.Helper()
+	full := filepath.Join(repo, store.Root, filepath.FromSlash(relative))
+	if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := qualityScenario("")
+	fields := "---\ntitle: t\ndescription: d\nstatus: accepted\ncomponents: [api]\n"
+	if len(qualifies) > 0 {
+		fields += "qualifies: [" + join(qualifies) + "]\n"
+	}
+	rendered := fields + "body-hash: " + store.BodyHash(body) + "\n---\n\n" + body
+	if err := os.WriteFile(full, []byte(rendered), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestQualifiedBy(t *testing.T) {
+	flowBody := "## Purpose\n\nx\n\n## Main flow\n\n1. x\n\n## Scenarios\n\n### Scenario: Upload succeeds\n\n" +
+		"- **GIVEN** a\n- **WHEN** b\n- **THEN** c\n"
+
+	t.Run("a whole-file qualifies reports an empty anchor list", func(t *testing.T) {
+		repo := t.TempDir()
+		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
+		writeQuality(t, repo, "specs/quality/upload-time.md", "specs/flow/upload-file.md")
+
+		got := QualifiedBy(repo, "specs/flow/upload-file.md")
+		if len(got) != 1 || got[0].Path != "specs/quality/upload-time.md" {
+			t.Fatalf("QualifiedBy = %+v", got)
+		}
+		if got[0].Anchors == nil || len(got[0].Anchors) != 0 {
+			t.Errorf("Anchors = %v, want an empty (non-nil) list for a whole-file qualifies", got[0].Anchors)
+		}
+	})
+
+	t.Run("an anchored qualifies reports that anchor", func(t *testing.T) {
+		repo := t.TempDir()
+		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
+		writeQuality(t, repo, "specs/quality/upload-time.md", "specs/flow/upload-file.md#upload-succeeds")
+
+		got := QualifiedBy(repo, "specs/flow/upload-file.md")
+		if len(got) != 1 || len(got[0].Anchors) != 1 || got[0].Anchors[0] != "upload-succeeds" {
+			t.Fatalf("QualifiedBy = %+v", got)
+		}
+	})
+
+	t.Run("a quality spec qualifying a different functional spec is not included", func(t *testing.T) {
+		repo := t.TempDir()
+		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
+		writeSpec(t, repo, "specs/flow/other.md", flowBody)
+		writeQuality(t, repo, "specs/quality/upload-time.md", "specs/flow/other.md")
+
+		if got := QualifiedBy(repo, "specs/flow/upload-file.md"); len(got) != 0 {
+			t.Errorf("QualifiedBy = %+v, want none", got)
+		}
+	})
+
+	t.Run("no quality specs at all reports nothing", func(t *testing.T) {
+		repo := t.TempDir()
+		writeSpec(t, repo, "specs/flow/upload-file.md", flowBody)
+		if got := QualifiedBy(repo, "specs/flow/upload-file.md"); len(got) != 0 {
+			t.Errorf("QualifiedBy = %+v, want none", got)
+		}
+	})
+}
+
+func TestScenarioVerifiedIn(t *testing.T) {
+	t.Run("a scenario with VERIFIED-IN reports its value, keyed by anchor", func(t *testing.T) {
+		got := ScenarioVerifiedIn(qualityScenario("pre-release — nightly load test"))
+		if got["upload-of-a-large-file"] != "pre-release" {
+			t.Errorf("ScenarioVerifiedIn = %v, want pre-release for upload-of-a-large-file", got)
+		}
+	})
+
+	t.Run("a scenario with no VERIFIED-IN has no entry", func(t *testing.T) {
+		got := ScenarioVerifiedIn(qualityScenario(""))
+		if _, present := got["upload-of-a-large-file"]; present {
+			t.Errorf("ScenarioVerifiedIn = %v, want no entry with no VERIFIED-IN line", got)
+		}
+	})
+
+	t.Run("no Scenarios section at all reports nothing", func(t *testing.T) {
+		if got := ScenarioVerifiedIn("## Purpose\n\nx\n"); len(got) != 0 {
+			t.Errorf("ScenarioVerifiedIn = %v, want none", got)
+		}
+	})
+}

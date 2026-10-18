@@ -149,3 +149,97 @@ func TestCheckEntryConfig(t *testing.T) {
 		}
 	})
 }
+
+func TestEnforcingChecks(t *testing.T) {
+	t.Run("a whole-file enforces matches", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPIComponent(t, repo)
+		writeDecision(t, repo, "decisions/api/structure/layers.md", "accepted")
+		checks := store.Checks{Checks: []store.Check{{
+			ID: "lint", Command: "go-arch-lint check", JustifiedBy: "decisions/api/structure/layers.md",
+			Enforces: []string{"decisions/api/structure/layers.md"},
+		}}}
+		if err := checks.Save(repo); err != nil {
+			t.Fatal(err)
+		}
+		got, err := EnforcingChecks(repo, "decisions/api/structure/layers.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "lint" {
+			t.Errorf("EnforcingChecks = %+v", got)
+		}
+	})
+
+	t.Run("a group coordinate enforces every record under it", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPIComponent(t, repo)
+		writeDecision(t, repo, "decisions/api/structure/layers.md", "accepted")
+		checks := store.Checks{Checks: []store.Check{{
+			ID: "lint", Command: "go-arch-lint check", JustifiedBy: "decisions/api/structure/layers.md",
+			Enforces: []string{"decisions/api/structure"},
+		}}}
+		if err := checks.Save(repo); err != nil {
+			t.Fatal(err)
+		}
+		got, err := EnforcingChecks(repo, "decisions/api/structure/layers.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "lint" {
+			t.Errorf("EnforcingChecks = %+v", got)
+		}
+	})
+
+	t.Run("a check enforcing something else does not match", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPIComponent(t, repo)
+		writeDecision(t, repo, "decisions/api/structure/layers.md", "accepted")
+		writeDecision(t, repo, "decisions/api/structure/other.md", "accepted")
+		checks := store.Checks{Checks: []store.Check{{
+			ID: "lint", Command: "x", JustifiedBy: "decisions/api/structure/layers.md",
+			Enforces: []string{"decisions/api/structure/other.md"},
+		}}}
+		if err := checks.Save(repo); err != nil {
+			t.Fatal(err)
+		}
+		got, err := EnforcingChecks(repo, "decisions/api/structure/layers.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 {
+			t.Errorf("EnforcingChecks = %+v, want none", got)
+		}
+	})
+
+	t.Run("no checks.json at all reports nothing, not an error", func(t *testing.T) {
+		repo := t.TempDir()
+		got, err := EnforcingChecks(repo, "decisions/api/structure/layers.md")
+		if err != nil {
+			t.Fatalf("EnforcingChecks returned an error with no checks.json: %v", err)
+		}
+		if len(got) != 0 {
+			t.Errorf("EnforcingChecks = %+v, want none", got)
+		}
+	})
+
+	t.Run("matches are sorted by id", func(t *testing.T) {
+		repo := t.TempDir()
+		declareAPIComponent(t, repo)
+		writeDecision(t, repo, "decisions/api/structure/layers.md", "accepted")
+		checks := store.Checks{Checks: []store.Check{
+			{ID: "z-check", Command: "x", JustifiedBy: "decisions/api/structure/layers.md", Enforces: []string{"decisions/api/structure/layers.md"}},
+			{ID: "a-check", Command: "y", JustifiedBy: "decisions/api/structure/layers.md", Enforces: []string{"decisions/api/structure/layers.md"}},
+		}}
+		if err := checks.Save(repo); err != nil {
+			t.Fatal(err)
+		}
+		got, err := EnforcingChecks(repo, "decisions/api/structure/layers.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 2 || got[0].ID != "a-check" || got[1].ID != "z-check" {
+			t.Errorf("EnforcingChecks = %+v, want a-check before z-check", got)
+		}
+	})
+}

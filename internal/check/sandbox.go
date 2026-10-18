@@ -4,11 +4,44 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/franwerner/open-record/internal/finding"
 	"github.com/franwerner/open-record/internal/store"
 )
+
+// ApproximatingSandboxes returns every declared sandbox whose
+// `approximates` names specPath#anchor exactly, sorted by id — the same
+// per-reference resolution qualityCoverage already performs, exposed here
+// for a caller that needs the sandboxes themselves, like `impact` (issue
+// 12)'s `qualities`. A store with no sandbox.json yet contributes nothing,
+// the same benign absence qualityCoverage already treats as normal.
+func ApproximatingSandboxes(repo, specPath, anchor string) ([]store.Sandbox, error) {
+	sandboxes, err := store.LoadSandboxes(repo)
+	if err != nil {
+		if store.IsSandboxesUndeclared(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var matches []store.Sandbox
+	for _, sandbox := range sandboxes.Sandboxes {
+		for _, ref := range sandbox.Approximates {
+			target, refAnchor, hasAnchor := strings.Cut(ref, "#")
+			refAnchor = strings.TrimSpace(refAnchor)
+			if !hasAnchor || refAnchor == "" {
+				continue
+			}
+			if normaliseSpecRef(target) == specPath && refAnchor == anchor {
+				matches = append(matches, sandbox)
+				break
+			}
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].ID < matches[j].ID })
+	return matches, nil
+}
 
 // SandboxEntry validates one sandbox's components, approximates and
 // observes fields against the repository — everything store.Sandboxes.

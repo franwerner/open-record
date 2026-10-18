@@ -4,11 +4,52 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/franwerner/open-record/internal/finding"
 	"github.com/franwerner/open-record/internal/store"
 )
+
+// EnforcingChecks returns every declared check whose `enforces` covers
+// target — the whole record, or a group coordinate containing it — sorted
+// by id. It is the same per-reference resolution unverifiedRecords
+// (annotations.go) already relies on, exposed here for a caller that needs
+// the checks themselves rather than only which records they cover, like
+// `impact` (issue 12)'s `verified_by`. A store with no checks.json yet
+// contributes nothing, the same benign absence every other caller of
+// LoadChecks already treats as normal.
+func EnforcingChecks(repo, target string) ([]store.Check, error) {
+	checks, err := store.LoadChecks(repo)
+	if err != nil {
+		if store.IsChecksUndeclared(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var matches []store.Check
+	for _, item := range checks.Checks {
+		for _, ref := range item.Enforces {
+			if coversRecord(repo, ref, target) {
+				matches = append(matches, item)
+				break
+			}
+		}
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].ID < matches[j].ID })
+	return matches, nil
+}
+
+// coversRecord reports whether one `enforces` entry resolves to target,
+// through the same resolution enforcesPaths (annotations.go) already uses.
+func coversRecord(repo, ref, target string) bool {
+	for _, path := range enforcesPaths(repo, ref) {
+		if path == target {
+			return true
+		}
+	}
+	return false
+}
 
 // CheckEntry validates one check's justified-by, enforces and config fields
 // against the repository — everything store.Checks.Validate cannot do on

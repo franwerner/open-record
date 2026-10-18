@@ -275,6 +275,37 @@ func checkScenarios(sections map[string][]string, specType, path, repo string) [
 	return findings
 }
 
+// ScenarioVerifiedIn returns, for a quality spec's body, every scenario's
+// first VERIFIED-IN value, keyed by the scenario's anchor (Slug of its
+// name). A scenario with no VERIFIED-IN line at all has no entry — exposed
+// for `impact` (issue 12), which reports each scenario's verification
+// state; checkScenarios above only needs to know whether one exists at
+// all, never which value, so it stays untouched. Called only on a quality
+// spec's body: VERIFIED-IN is checkScenarios's own concern everywhere else,
+// and a functional spec's scenarios never carry it.
+func ScenarioVerifiedIn(body string) map[string]string {
+	sections := splitSections(body)
+	lines, present := sections["## Scenarios"]
+	if !present {
+		return nil
+	}
+	text := strings.Join(lines, "\n")
+	locations := scenarioPattern.FindAllStringSubmatchIndex(text, -1)
+	values := map[string]string{}
+	for index, location := range locations {
+		end := len(text)
+		if index+1 < len(locations) {
+			end = locations[index+1][0]
+		}
+		name := strings.TrimSpace(text[location[2]:location[3]])
+		block := text[location[1]:end]
+		if match := verifiedInPattern.FindStringSubmatch(block); match != nil {
+			values[Slug(name)] = match[1]
+		}
+	}
+	return values
+}
+
 func union(left, right map[string]bool) map[string]bool {
 	merged := make(map[string]bool, len(left)+len(right))
 	for key := range left {

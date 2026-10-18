@@ -235,3 +235,43 @@ func TestServedBy(t *testing.T) {
 		t.Errorf("ServedBy for an unserved spec = %v, want none", got)
 	}
 }
+
+func TestDependsOnGraph(t *testing.T) {
+	repo := t.TempDir()
+	writeDecision(t, repo, "decisions/api/data/postgres.md", "accepted")
+	writeDecision(t, repo, "decisions/api/data/pgx.md", "accepted", "decisions/api/data/postgres.md")
+	writeDecision(t, repo, "decisions/api/data/atlas.md", "accepted", "decisions/api/data/pgx.md")
+
+	graph := DependsOnGraph(repo)
+	if got := graph["decisions/api/data/pgx.md"]; len(got) != 1 || got[0] != "decisions/api/data/postgres.md" {
+		t.Errorf("graph[pgx.md] = %v, want [postgres.md]", got)
+	}
+	if got := graph["decisions/api/data/atlas.md"]; len(got) != 1 || got[0] != "decisions/api/data/pgx.md" {
+		t.Errorf("graph[atlas.md] = %v, want [pgx.md]", got)
+	}
+	if got := graph["decisions/api/data/postgres.md"]; len(got) != 0 {
+		t.Errorf("graph[postgres.md] = %v, want none: it depends on nothing", got)
+	}
+}
+
+func TestResolveRecordRef(t *testing.T) {
+	t.Run("a whole-file decision reference resolves to its canonical path", func(t *testing.T) {
+		got, ok := ResolveRecordRef("decisions/api/data/postgres.md")
+		if !ok || got != "decisions/api/data/postgres.md" {
+			t.Errorf("ResolveRecordRef = %q, %v", got, ok)
+		}
+	})
+
+	t.Run("a path with no .md suffix still resolves", func(t *testing.T) {
+		got, ok := ResolveRecordRef("decisions/api/data/postgres")
+		if !ok || got != "decisions/api/data/postgres.md" {
+			t.Errorf("ResolveRecordRef = %q, %v", got, ok)
+		}
+	})
+
+	t.Run("something with no level at all does not resolve", func(t *testing.T) {
+		if _, ok := ResolveRecordRef("not-a-coordinate"); ok {
+			t.Errorf("ResolveRecordRef accepted a reference with no level")
+		}
+	})
+}
