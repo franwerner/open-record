@@ -17,10 +17,9 @@ import (
 // reports), and whatever is wrong with it, if anything.
 //
 // A whole-file reference (no `#anchor`) is never broken by the anchor
-// half — a `rule` spec and a decision have no anchors at all
-// (internal/check/anchor.go), and this task extends the same allowance to
-// any other record: an annotation may name a functional spec as a whole
-// without picking one particular scenario or transition.
+// half — a decision has no anchors at all (internal/check/anchor.go), and
+// this task extends the same allowance to every spec: an annotation may name
+// a spec as a whole without picking one particular scenario or transition.
 func resolveAnnotation(repo string, mention annotation.Mention) (recordPath string, findings []finding.Finding) {
 	coordinate, slug, ok := resolveStoreFile(mention.Path)
 	if !ok {

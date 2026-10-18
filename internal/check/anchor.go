@@ -51,9 +51,9 @@ func orderedSections(body string, headings ...string) []orderedSection {
 
 // anchorSources walks body in document order and returns every anchor a
 // future reference could point at: one per `### Scenario:` name, one per
-// lifecycle transition line. A `rule` or a decision carries neither section,
-// so it yields nothing — those two types are not anchorable, the file is
-// its own unit.
+// lifecycle transition line. A decision carries neither section, so it
+// yields nothing — the file is its own unit. A `rule` anchors its scenarios
+// like any spec; only its `## Rule` statement is not anchorable.
 //
 // A name that produces no letters or digits at all has nothing stable to
 // anchor to; Slug collapses it to the empty string, and that is reported

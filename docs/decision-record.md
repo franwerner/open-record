@@ -454,11 +454,10 @@ deps:
     mayDependOn: []
 ```
 
-**`<anchor>` is optional, on every record kind.** A decision and a `rule` spec have no anchors at all
-(see ["No internal anchors"](#no-internal-anchors) above and
-[capability-spec.md](capability-spec.md#anchors)), so an annotation naming either is always whole-file,
-with no `#`. A `flow`, `process`, `lifecycle` or `quality` spec *does* have anchors, and an annotation
-naming one of those may still omit `#anchor` — it then covers the whole record rather than one
+**`<anchor>` is optional, on every record kind.** A decision has no anchors at all (see ["No internal
+anchors"](#no-internal-anchors) above), so an annotation naming one is always whole-file, with no `#`.
+Every spec — `rule` included — anchors each `### Scenario:` (see
+[capability-spec.md](capability-spec.md#anchors)), and an annotation naming one may still omit `#anchor` — it then covers the whole record rather than one
 particular scenario or transition, the same allowance a decision gets by having no anchor to pick from
 in the first place.
 
