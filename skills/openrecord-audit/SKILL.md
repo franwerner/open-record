@@ -1,6 +1,6 @@
 ---
 name: openrecord-audit
-description: Check whether a single accepted record still describes the code it governs, claim by claim, with file-and-line evidence for what holds, what is contradicted, and what the code has nothing to say about. USE THIS SKILL when asked whether a record is still true of the code, when someone suspects a record is stale or was never implemented, before relying heavily on an accepted record for a big decision, or when asked to audit, verify, or check a specific record against the implementation.
+description: Check whether a single accepted record still describes the code it governs, claim by claim, with file-and-line evidence for what holds, what is contradicted, and what the code has nothing to say about. USE THIS SKILL when asked whether a record is still true of the code, when someone suspects a record is stale or was never implemented, before relying heavily on an accepted record for a big decision, when asked to audit, verify, or check a specific record against the implementation, or when asked whether the compliance registry is still accurate, whether a record is possibly stale, or to mark a record verified.
 ---
 
 # Audit a record against the code it governs
@@ -179,10 +179,33 @@ For several records, one block like this per record, plus a compact summary tabl
 Never a merged verdict across records. The table summarises independent audits; it is not a verdict
 of its own.
 
-## It never writes
+## It never writes the record — but it does log the outcome
 
-This is the hard limit. This skill does not edit the record, does not fix the code, and does not
-change `status` — not even when the contradiction looks obvious and the fix looks small.
+This is the hard limit on the record itself. This skill does not edit the record, does not fix the
+code, and does not change `status` — not even when the contradiction looks obvious and the fix looks
+small.
+
+It does, though, record what this audit found — not the record's content, only whether it still holds
+right now — with `openrecord compliance log` (task 14's registry; run `openrecord compliance log
+--help` for its full syntax). Every claim held: log `verified`.
+
+```
+openrecord compliance log decisions/api/security/rate-limits/at-the-gateway.md \
+  --event verified --verified-with audit
+```
+
+**`--verified-with` lists only what this audit actually did** — `audit`, always, since that is this
+skill's own method — plus `checks` only when `openrecord check run` was also run against this record
+and passed. Never add `scenarios` or `sandbox` on this skill's own say-so; those are somebody else's
+verification, and claiming them here would be reporting work this audit never did.
+
+A claim came back `contradicted`: log `blocked` instead, with `blocked_by` naming what stands in the
+way — `contradicts`, naming the record that disagrees (this one), plus a short note. Never log
+`verified` over a contradiction found in this same pass.
+
+**Never log what this audit did not actually check.** An `unverifiable` claim is not evidence either
+way, and skipping a record entirely (the presence gate, or a caller who named only one of several) is
+not something to log at all — `verified_with`/`blocked_by` only ever claims what this run actually did.
 
 A `contradicted` claim means one of two things is wrong, and which one is somebody's call, not this
 skill's. The code may be the bug — someone added a shortcut and never told the record about it. Or
@@ -206,6 +229,10 @@ Ways forward:
 
 Recommendation: needs a person who knows why users.go was touched.
 ```
+
+Log `blocked` for this record either way, naming the contradiction just found (`blocked_by:
+contradicts`) — the STOPPED block above is for the person deciding what to do about it; the logged
+event is for the registry, so the next look does not have to rediscover the same gap from nothing.
 
 This is stated plainly elsewhere in this tool's own guidance: "the record turning out to be wrong or
 stale is a perfectly good outcome. It is just not the agent's to conclude alone."

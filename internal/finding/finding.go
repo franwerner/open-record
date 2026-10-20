@@ -111,6 +111,17 @@ const (
 	CodeSandboxObservesNotFound           = "sandbox-observes-not-found"
 	CodeSandboxObservesNotDecision        = "sandbox-observes-not-decision"
 	CodeCheckNeedsNotFound                = "check-needs-not-found"
+	CodeComplianceUndeclared              = "compliance-undeclared"
+	CodeComplianceUnreadable              = "compliance-unreadable"
+	CodeComplianceEventInvalid            = "compliance-event-invalid"
+	CodeComplianceVerifiedWithMissing     = "compliance-verified-with-missing"
+	CodeComplianceVerifiedWithInvalid     = "compliance-verified-with-invalid"
+	CodeComplianceBlockedByMissing        = "compliance-blocked-by-missing"
+	CodeComplianceBlockedByKindInvalid    = "compliance-blocked-by-kind-invalid"
+	CodeComplianceBlockedByRecordMissing  = "compliance-blocked-by-record-missing"
+	CodeComplianceBlockedByNoteMissing    = "compliance-blocked-by-note-missing"
+	CodeComplianceBlockedByNotFound       = "compliance-blocked-by-not-found"
+	CodeComplianceOrphan                  = "compliance-orphan"
 	// CodeRecordNotFound is `impact`'s own usage error: the argument does
 	// not resolve to a record in the store, at all — a different problem
 	// from the store itself having something wrong, which is why cli.Run

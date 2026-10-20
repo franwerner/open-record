@@ -699,6 +699,246 @@ findings against `sandbox.json` as it already sits on disk.
 
 ---
 
+## `compliance` {#compliance}
+
+Task 14's registry: did the code a record governs actually get checked against it, and does it still
+hold? Nothing else in the store remembers this — without it, any automation implementing records would
+have to reverify the whole store on every run, which stops scaling the moment a project has more than a
+handful of accepted records.
+
+**It is a shortcut for not reverifying what is already known to hold, never the source of truth.** The
+truth is always comparing the real code against the real record; `compliance` only remembers the last
+time that comparison was made, against which exact version of the record, and what it found. A record
+with no compliance file is not "unimplemented" — it is **unknown**, and the first thing any flow working
+through it does is find out, never assume either way. A brand-new project adopting openrecord starts with
+every record unknown, and that is the normal state, not a backlog of failures.
+
+### Where it lives
+
+```
+.openrecord/compliance/
+  specs/flow/upload-file.json
+  decisions/api/data/presigned-uploads.json
+```
+
+One JSON file per record, at the record's own store-relative path with `.md` replaced by `.json` —
+mirroring the store's own layout so two records never contend for the same file. Written only by the
+binary (issue 03), and **committed together with the code that earned the event**: if a change never
+reaches the main branch, its compliance file never claims anything either, because it never existed on a
+branch anybody merged.
+
+### Content
+
+```json
+{
+  "version": "1",
+  "events": [
+    { "event": "adopted", "body-hash": "50d858e0...", "date": "2026-09-10", "verified-with": ["audit"] },
+    { "event": "blocked", "body-hash": "9a8b7c6d...", "date": "2026-10-01",
+      "blocked-by": [ { "kind": "pending", "record": "decisions/api/uploads/virus-scan.md" } ] },
+    { "event": "implemented", "body-hash": "9a8b7c6d...", "date": "2026-10-04", "verified-with": ["checks", "scenarios"] }
+  ],
+  "hash": "..."
+}
+```
+
+An **array of events**, kept whole rather than collapsed to the last one, so the history reads without
+having to go dig it out of git. `hash` is the same integrity stamp every other JSON file under
+`.openrecord/` carries (see [decision-record.md](decision-record.md#hash)); `version` is the store format.
+
+**Four events**, each carrying `body-hash` (the record's body-hash *at the moment this was logged*) and
+`date` (`YYYY-MM-DD`) — both filled by the binary, never given on the command line:
+
+| Event | Means |
+| --- | --- |
+| `implemented` | Code was written or changed to satisfy the record, and verification passed. |
+| `adopted` | No compliance file existed yet, the code already satisfied the record, and this records that without any code change. |
+| `verified` | Re-checked with no code change (typically after a `possibly_stale` warning) and still holds. |
+| `blocked` | Work stopped on a gap or a contradiction. |
+
+There is no `reason` field, no `by`/committer field, and no `commit` field: a commit cannot record its own
+hash, and git already answers "which commit" whenever that matters (see `possibly_stale`, below) — storing
+it a second time here would only ever be able to drift from the truth.
+
+**`implemented`/`adopted`/`verified` require `verified-with`**: a non-empty subset of `checks`,
+`scenarios`, `sandbox`, `audit` — the four parts of "done" (task 18) — with no value repeated. `verified`
+means "the definition of done was actually applied and held," never "the checks passed": a record with no
+checks at all is still verifiable, by audit.
+
+**`blocked` requires `blocked-by`**, a non-empty structured list, replacing a free-text `reason`:
+
+```json
+"blocked-by": [
+  { "kind": "pending",     "record": "decisions/api/uploads/virus-scan.md" },
+  { "kind": "contradicts", "record": "decisions/api/data/presigned-uploads.md", "note": "..." },
+  { "kind": "missing",     "note": "nothing decides which error wins: size or format" }
+]
+```
+
+`pending` (blocked on a decision that exists but is not yet accepted) and `contradicts` (blocked because an
+existing record says something incompatible) each require `record`, naming a record that exists anywhere
+in the store — not only a decision, since what is blocking may itself be a spec. `missing` (blocked on a
+decision nobody has written down yet) requires `note` instead, and names no record. `note` is optional on
+the other two kinds.
+
+### Compliance state: computed, never stored
+
+`compliance status` (below) never reads a stored "state" field — there is none. The state is always
+recomputed from the event history and the record's **current** body-hash, so it can never go stale on its
+own the way a cached field could:
+
+| State | How it is computed |
+| --- | --- |
+| `unknown` | No compliance file, or one with no events. |
+| `up_to_date` | The latest fulfilled event (`implemented`/`adopted`/`verified`) has the record's current body-hash, and is not superseded by a later `blocked` on that same body-hash. |
+| `blocked` | The latest event is `blocked`, and its body-hash still matches the record's current one. |
+| `outdated` | There is a fulfilled event, but the latest relevant one's body-hash no longer matches — the record was edited since. |
+
+A `blocked` event whose body-hash no longer matches the record's current one no longer counts as blocked
+at all (the record changed since): the state falls back to whatever the latest *fulfilled* event says,
+`outdated` if there is one, `unknown` if there is none.
+
+### `possibly_stale`
+
+A flag on top of any state except `unknown` (an unknown record has nothing to compare against yet).
+It means **"this changed and nobody looked again"** — the code governing a record changed since the last
+time this registry recorded a look at it, and the record itself did not change. It is never a verdict: if
+the record still holds, log `verified` and the flag clears; if it does not, the gap goes into the plan like
+any other.
+
+**Triggered by any change, committed or uncommitted, with no threshold**, in a file whose **most specific**
+declared component (`components.json`'s own `OwnerOf` — the longest matching path prefix, never "every
+component that contains it" the way `impact --files`'s `files` map reads it) is the record's own
+component:
+
+- A decision's component is the folder it is filed under (closed by containment, same as everywhere else).
+- A spec's components are the ones its frontmatter names; it is `possibly_stale` if *any* changed file's
+  most specific owner is one of them.
+
+This is deliberately narrower than `impact --files`. With `root` declared as `.` (the repository root),
+"every component whose path contains the file" would mark every `root` record on every single change
+anywhere in the repository, and the warning would stop meaning anything. `impact` answers "what do I have
+to respect from this file," where `root` counts; `possibly_stale` answers "whose code is this," where it
+should not — a change made from inside a narrower component (say, `api`) never marks `root`, only `api`.
+What this gives up — a `root` rule quietly violated from within a subcomponent — is exactly what `root`'s
+own checks (`check run`) catch instead.
+
+**Based on git, never on dates**: clocks differ between machines, and a rebase rewrites commit dates
+without changing any actual content.
+
+| Case | How it is read |
+| --- | --- |
+| Committed since the last look | `git diff <reference>..HEAD -- <changed paths>`, filtered by owner |
+| Not committed at all (modified or new) | `git status --porcelain --untracked-files=all`, filtered by owner |
+
+**Reference point: the last commit that touched that record's own compliance file**
+(`git log -1 --format=%H -- .openrecord/compliance/<record path>.json`) — never a date, and never the
+event's own commit, which it cannot record (see "no `commit` field," above). The task's own code lands in
+the same commit as its `verified`/`implemented` event, so that commit's own changes never trigger the
+warning; only what changes *after* it does. A compliance file that has never been committed yet (freshly
+logged, nothing committed since) has no commit to diff from — the committed half of the check is skipped
+for that record, nothing more; its uncommitted half still runs unconditionally, since that comparison is
+never relative to a commit in the first place.
+
+**Not a git repository at all:** `possibly_stale` is reported empty for every record, always — there is no
+committed/uncommitted distinction to read without git, and refusing the whole report over one missing
+flag would throw away everything else `compliance status` can still say truthfully.
+
+### `compliance status`
+
+```
+openrecord compliance status
+openrecord compliance status --files src/api/handlers/upload.go
+```
+
+Reports every record's state, or — with `--files`, read the same way `impact --files`/`check run --files`
+already read it (space-separated, repeated, or comma-separated, freely mixed) — only the records governing
+those files, via the identical file → components → records chain. Validated first, over the whole store,
+exactly like `impact`: any error anywhere refuses rather than reporting against a store that cannot be
+trusted.
+
+```json
+{
+  "files": { "src/api/handlers/upload.go": ["api"] },
+  "unknown": ["specs/flow/export-report.md"],
+  "outdated": ["decisions/api/data/presigned-uploads.md"],
+  "blocked": [
+    { "path": "specs/flow/bulk-delete.md",
+      "blocked_by": [ { "kind": "pending", "record": "decisions/api/uploads/virus-scan.md" } ] }
+  ],
+  "possibly_stale": ["specs/flow/upload-file.md"],
+  "up_to_date": 12
+}
+```
+
+`files` is present only with `--files`. `unknown`/`outdated`/`possibly_stale` are sorted path lists;
+`blocked` is a sorted list of `{path, blocked_by}`, carrying the exact `blocked-by` entries of the event
+that made it blocked; `up_to_date` is a count, not a list — it is the bucket every record not worth
+singling out falls into, and the one openrecord expects to dominate in a healthy project.
+
+### `compliance log`
+
+```
+openrecord compliance log specs/flow/upload-file.md --event implemented --verified-with checks,scenarios
+openrecord compliance log decisions/api/data/presigned-uploads.md --event adopted --verified-with audit
+openrecord compliance log specs/flow/bulk-delete.md --event blocked \
+  --blocked-by pending:decisions/api/uploads/virus-scan.md \
+  --blocked-by "missing:nothing decides which error wins, size or format"
+```
+
+The one way to write this registry outside the implementation flow itself (issue 03 forbids a hand edit) —
+and the exact command that flow (issues 15/18) calls at the end of every task.
+
+**`--event`** is required: one of `implemented`, `adopted`, `verified`, `blocked`. **`--verified-with`**
+(repeatable, or comma-separated) is required for the first three and forbidden for `blocked`.
+**`--blocked-by`** (repeatable) is required for `blocked` and forbidden otherwise.
+
+**`--blocked-by`'s syntax** is one self-contained flag value per entry, `kind:value`, so several entries
+never have to coordinate across separate flags:
+
+| Form | Meaning |
+| --- | --- |
+| `--blocked-by pending:decisions/x.md` | Blocked on `decisions/x.md`, not yet accepted. |
+| `--blocked-by contradicts:decisions/y.md` | Blocked: `decisions/y.md` says something incompatible. |
+| `--blocked-by contradicts:decisions/y.md:a free-text note` | Same, with an optional note after a second colon. |
+| `--blocked-by "missing:nothing decides which error wins: size or format"` | Blocked: nobody has written this decision down; everything after the first colon is the note, verbatim, including any further colons. |
+
+Only the **first** colon ever separates the kind from the rest — a `missing` note (or a `contradicts`
+note after its own second colon) is free text and may contain colons, commas or anything else without
+being torn apart.
+
+The binary fills `body-hash` (the record's current one) and `date`; it does not read them from the command
+line, and it does **not** require `check run` to have passed first — most records have no checks at all,
+and a record's compliance is backed by whichever of `checks`/`scenarios`/`sandbox`/`audit` actually ran,
+never only by the one this binary itself can execute. It also does not record who ran the command: see "no
+`by` field," above.
+
+Validated first, over the whole store, like `compliance status`. Refuses — file untouched — when an
+existing compliance file's own `hash` cannot be trusted (`json-hash-missing`/`json-hash-mismatch`, the same
+way `check add`/`sandbox add` refuse over a tampered `checks.json`/`sandbox.json`), when `--event` is not
+one of the four, when the required flag for that event is empty or missing, when a `blocked-by` entry's
+kind is unknown or its required field (`record`/`note`) is absent, or when a `pending`/`contradicts`
+`blocked-by` names a record that does not exist. On success:
+
+```json
+{
+  "record": "specs/flow/bulk-delete.md",
+  "event": { "event": "blocked", "body_hash": "9a8b7c6d...", "date": "2026-10-20",
+             "blocked_by": [ { "kind": "pending", "record": "decisions/api/uploads/virus-scan.md" } ] },
+  "state": "blocked"
+}
+```
+
+### Validations
+
+Every control above has a stable code, listed with the rest of `validate`'s findings in the codes table
+below (`compliance-unreadable` through `compliance-orphan`). A compliance file whose record no longer
+exists in the store (renamed or removed) is `compliance-orphan`, a **warning**: it governs nothing any
+more, but deleting it is left to whoever maintains the store, never done automatically — the same
+principle `component remove`/`sandbox remove` already follow for what still references something.
+
+---
+
 ## `level`
 
 Creates a concern or subgroup folder together with its `INDEX.md`. A level cannot appear by accident:
@@ -860,9 +1100,9 @@ openrecord validate --for decisions/api    → api and everything below it
 ``` It never judges whether a record is *honest* or still true of the
 code — that is reading, not linting.
 
-This walk covers `components.json`, `actors.json`, `checks.json` and `sandbox.json`, records and
-indexes — everything that sits next to the store proper, plus `implementation/` as a later issue
-introduces it. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
+This walk covers `components.json`, `actors.json`, `checks.json`, `sandbox.json` and `compliance/`
+(task 14 — see [`#compliance`](#compliance)), records and indexes — everything that sits next to the
+store proper. Files under `runs/` are a deliberate exception: they are working data, gitignored, and
 not part of the coordinate this walk covers by default, so an old or corrupt run never blocks a
 `validate` over records that have nothing to do with it. The binary still stamps and can check their
 `hash` (see [decision-record.md](decision-record.md#hash)), just through the execution's own commands
@@ -976,6 +1216,16 @@ disappeared).
 | `sandbox-observes-not-decision` | error | `observes` names a record that is not a decision. |
 | `sandbox-undeclared` | error | Something needs a sandbox and `sandbox.json` does not exist yet. |
 | `sandbox-unreadable` | error | `sandbox.json` exists but cannot be parsed. |
+| `compliance-unreadable` | error | A compliance file (task 14) exists but cannot be parsed, or declares an unknown format. |
+| `compliance-event-invalid` | error | An event is not one of `implemented`, `adopted`, `verified`, `blocked`. |
+| `compliance-verified-with-missing` | error | An `implemented`/`adopted`/`verified` event has no `verified-with`. |
+| `compliance-verified-with-invalid` | error | A `verified-with` value is not one of `checks`, `scenarios`, `sandbox`, `audit`, or is repeated. |
+| `compliance-blocked-by-missing` | error | A `blocked` event has no `blocked-by` entries. |
+| `compliance-blocked-by-kind-invalid` | error | A `blocked-by` entry's `kind` is not `pending`, `contradicts`, or `missing`. |
+| `compliance-blocked-by-record-missing` | error | A `pending`/`contradicts` entry has no `record`, or a `missing` entry names one. |
+| `compliance-blocked-by-note-missing` | error | A `missing` entry has no `note`. |
+| `compliance-blocked-by-not-found` | error | A `pending`/`contradicts` `blocked-by` names a record that does not exist. |
+| `compliance-orphan` | warning | A compliance file whose record no longer exists in the store. |
 
 ### Exit code
 

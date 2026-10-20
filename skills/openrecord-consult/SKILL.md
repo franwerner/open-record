@@ -67,6 +67,11 @@ not raw candidates you still have to open to know whether they apply.
 If `impact --files` reports no owner at all for a path (`[]`), that path is outside every declared
 surface — a gap worth saying, not a reason to guess which component it belongs to.
 
+Before editing, also run `openrecord compliance status --files <the same files>` (task 14): it shows,
+among the records that govern what you are about to touch, which ones are `outdated` (edited since the
+code last satisfied them), `possibly_stale` (their code changed and nobody looked again), or `blocked`
+— worth knowing before you add to that code, not just after.
+
 **2. Search.**
 
 ```

@@ -70,6 +70,15 @@ func TestHookChecksWriteOnARecordPath(t *testing.T) {
 	}
 }
 
+func TestHookChecksEditOnComplianceJSON(t *testing.T) {
+	// Task 14's registry has no dedicated branch in decideWritePath — it
+	// falls through to the generic "nothing under .openrecord/ is written
+	// directly" deny the way every other path under the store does. This
+	// just confirms that fallback actually reaches it.
+	out := hookDecide(t, "Edit", map[string]string{"file_path": "/repo/.openrecord/compliance/specs/flow/upload-file.json"})
+	assertDeny(t, out, "openrecord")
+}
+
 func TestHookChecksEditOnClaudeSettings(t *testing.T) {
 	out := hookDecide(t, "Edit", map[string]string{"file_path": "/repo/.claude/settings.json"})
 	assertDeny(t, out, "--guard")

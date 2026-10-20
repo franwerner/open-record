@@ -131,6 +131,16 @@ func Store(repo string, coordinate store.Coordinate) ([]finding.Finding, error) 
 		}
 	}
 
+	// Task 14's registry: one JSON file per record under ComplianceDir,
+	// never a single declaration like checks.json/sandbox.json above, so
+	// there is nothing to load before the walk — ComplianceStore walks
+	// whatever is already on disk and reports its own findings directly.
+	complianceFindings, err := ComplianceStore(repo)
+	if err != nil {
+		return nil, err
+	}
+	findings = append(findings, complianceFindings...)
+
 	files, walkFindings, err := store.Walk(repo, coordinate)
 	if err != nil {
 		return nil, err

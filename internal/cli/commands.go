@@ -124,6 +124,27 @@ var commands = []*Command{
 		},
 	},
 	{
+		Name:    "compliance",
+		Summary: "Report and log task 14's compliance registry — whether a record's code is known to still hold, never the fact of it.",
+		Sub: []*Command{
+			{
+				Name:    "status",
+				Summary: "Report every record's compliance state, or only the ones governing a set of files.",
+				Usage:   "openrecord compliance status [--files FILE...]",
+				Flags:   describes(complianceStatusFlags),
+				Run:     runComplianceStatus,
+			},
+			{
+				Name:    "log",
+				Summary: "Log a compliance event for one record: implemented, adopted, verified, or blocked.",
+				Usage: "openrecord compliance log PATH --event implemented|adopted|verified|blocked " +
+					"[--verified-with checks,scenarios,sandbox,audit] [--blocked-by pending:RECORD|contradicts:RECORD[:NOTE]|missing:NOTE]",
+				Flags: describes(complianceLogFlags),
+				Run:   runComplianceLog,
+			},
+		},
+	},
+	{
 		Name:    "level",
 		Summary: "Create a concern or subgroup with its index.",
 		Sub: []*Command{
