@@ -49,6 +49,11 @@ var (
 	// line; the free text after the value is never validated, only where it
 	// says to look.
 	verifiedInPattern = regexp.MustCompile(`(?m)^\s*-\s+\*\*VERIFIED-IN\*\*\s+(\S+)`)
+	// measurePattern pulls the free text off a `- **MEASURE** <text>` line —
+	// exposed through ScenarioMeasure for `check run`/`sandbox run` (task
+	// 13b), which report what a sandbox's `approximates` anchor is
+	// measuring.
+	measurePattern = regexp.MustCompile(`(?m)^\s*-\s+\*\*MEASURE\*\*\s+(.+?)\s*$`)
 )
 
 // verifiedInValues is VERIFIED-IN's whole domain: when a scenario is verified
@@ -301,6 +306,36 @@ func ScenarioVerifiedIn(body string) map[string]string {
 		block := text[location[1]:end]
 		if match := verifiedInPattern.FindStringSubmatch(block); match != nil {
 			values[Slug(name)] = match[1]
+		}
+	}
+	return values
+}
+
+// ScenarioMeasure returns, for a quality spec's body, every scenario's
+// MEASURE text, keyed by the scenario's anchor (Slug of its name) — the
+// same way ScenarioVerifiedIn is keyed, exposed for `check run`/`sandbox
+// run` (task 13b): a sandbox's `approximates` names one anchor, and its
+// `because.approximates` reports what that anchor is actually measuring. A
+// scenario missing MEASURE (a defect checkScenarios already reports on its
+// own) has no entry.
+func ScenarioMeasure(body string) map[string]string {
+	sections := splitSections(body)
+	lines, present := sections["## Scenarios"]
+	if !present {
+		return nil
+	}
+	text := strings.Join(lines, "\n")
+	locations := scenarioPattern.FindAllStringSubmatchIndex(text, -1)
+	values := map[string]string{}
+	for index, location := range locations {
+		end := len(text)
+		if index+1 < len(locations) {
+			end = locations[index+1][0]
+		}
+		name := strings.TrimSpace(text[location[2]:location[3]])
+		block := text[location[1]:end]
+		if match := measurePattern.FindStringSubmatch(block); match != nil {
+			values[Slug(name)] = strings.TrimSpace(match[1])
 		}
 	}
 	return values

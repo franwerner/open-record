@@ -368,8 +368,9 @@ openrecord check add e2e-api \
 ```
 
 It must name a sandbox already declared in `sandbox.json`; a nonexistent one is
-`check-needs-not-found`. The binary never starts, exercises or stops that sandbox itself — `needs` only
-records that this check depends on it, see [`#sandbox`](#sandbox) for who actually does.
+`check-needs-not-found`. Declaring `--needs` only records that this check depends on that sandbox —
+`check add` shells out to nothing at all. `check run` ([below](#check-run)) is what actually brings that
+sandbox up, once, for every check that needs it, exercises nothing itself, and tears it back down again.
 
 **`--justified-by`** is the one decision that justifies running this tool at all, so no entry floats
 with no origin — the same principle `serves` and `depends-on` already follow for a decision's own
@@ -407,6 +408,69 @@ every bit as cheap as an edit would be, and there is no "still referenced" case 
 against the way `component remove`/`actor remove` do. Like every `check` command, it refuses before
 touching the file when `checks.json` cannot be trusted.
 
+### `check run` {#check-run}
+
+Task 13b: the binary actually running what `check add` only ever declared. `impact`/`impact --files`
+report which checks apply; `check run` is what completes `{files}`, runs the command, and turns the
+result into an exit code.
+
+```
+openrecord check run --files src/api/handlers/upload.go
+openrecord check run arch-layers
+openrecord check run e2e-api --files src/api/handlers/upload.go
+```
+
+**`--files <file...>`** selects every declared check whose `enforces` covers a record governing those
+files — the identical file → components → records chain `impact --files` resolves (see
+[`#impact`](#impact)), never a second resolver. **An id** (positional) selects that one check instead;
+the two combine — `check run ID --files a b` runs exactly that check, substituting `{files}` with those
+files — but at least one of them is required. Giving neither, or giving an id whose command contains
+`{files}` with no `--files` at all, is a usage error: `{files}` is never completed with nothing, because
+that would run over the whole project and a "passed" would claim something that was never run.
+
+Every match's `{files}` is replaced with the files actually requested, each shell-quoted and
+space-separated — `--files` is read the same way `impact --files` reads it (space-separated, repeated,
+or comma-separated, freely mixed). A check with no `{files}` in its command just runs, whether or not
+`--files` was given.
+
+**By default every selected check runs** — the ones with `{files}` and the ones without, the "before
+you're done" sweep. **`--per-change`** narrows that to only the ones whose command contains `{files}` —
+the "while you're editing" loop. Leaving the flag out is always the safer default: forgetting it never
+skips something that mattered, it only costs more time.
+
+Every check runs through `sh -c`, with the repository root as its working directory, and its output is
+discarded — not captured, not streamed anywhere; see "No logs or stored output yet", below. A check
+with a declared `needs` brings that sandbox up with the same lifecycle `sandbox run` ([below](#sandbox-run))
+uses (`setup → start → ready`, no `exercise`), once for every selected check that needs it, runs them,
+and tears it down again — always, even when one of them fails. If the sandbox never comes up, every
+check that needed it is reported `failed` without running at all, and the sandbox's own steps are
+reported under `sandboxes`.
+
+Validated first, over the whole store, exactly like `impact`: an error anywhere refuses before anything
+runs, reporting the same findings `impact` would. Output:
+
+```json
+{
+  "files": { "src/api/handlers/upload.go": ["api"] },
+  "checks": [
+    { "id": "e2e-api", "command": "go test ./e2e/... -run TestUpload", "result": "passed", "seconds": 4.2, "needs": "api" },
+    { "id": "lint", "command": "golangci-lint run 'src/api/handlers/upload.go'", "result": "failed", "seconds": 0.8 }
+  ],
+  "sandboxes": [
+    { "id": "api", "steps": [
+      { "step": "setup", "command": "docker compose up -d", "result": "ok", "seconds": 1.1 },
+      { "step": "ready", "http": "http://localhost:8080/health", "result": "ok", "seconds": 0.3 },
+      { "step": "stop", "command": "docker compose down -v", "result": "ok", "seconds": 0.4 } ] }
+  ]
+}
+```
+
+`files` is present only with `--files`; `sandboxes` only when at least one was brought up. `checks` is
+sorted by id. **The exit code is the verdict** — `0` only when every selected check passed, `1`
+otherwise — so a script or an agent never has to parse the body to know whether it is done. A failed
+check reports only `"result": "failed"`, with no output: see "No logs or stored output yet" below for
+why, and what changes once that lands.
+
 ### Why there is no `stage` field
 
 A check runs either on just the files a change touched, or over the whole project — and that is read
@@ -417,10 +481,10 @@ off `command` itself, never a separate field:
 | Contains the literal `{files}` | Runs on just the touched files: cheap, after every change — `on-change` | `golangci-lint run {files}` |
 | Does not contain `{files}` | Runs over the whole project: closing a task, or whenever asked — `pre-merge` | `go-arch-lint check`, `go test ./...` |
 
-`{files}` is a **classification this binary reports, never logic it executes** — nothing here ever
-shells out to run a check's command. Which checks actually run, and when, is the implementing flow's or
-the project's own CI, never this binary's job: see [verification.md](verification.md#where-it-lands) for
-how these two values map onto that document's wider vocabulary of `on-change` and `pre-merge`.
+`{files}` is a **classification `check add`/`check remove` only ever report, never execute** — declaring
+or removing an entry never shells out. `check run` ([below](#check-run)) is what actually completes
+`{files}` and runs a check's command; see [verification.md](verification.md#where-it-lands) for how
+these two values map onto that document's wider vocabulary of `on-change` and `pre-merge`.
 
 ### What never belongs in `checks.json`
 
@@ -436,6 +500,18 @@ A check with no `--enforces` enforces no record — code health, dead code, dupl
 but it does not carry the same weight as a check that does enforce something: a hygiene check that
 counted the same as one backed by a decision would reward optimizing its own metric instead of actually
 meeting what was decided.
+
+### No logs or stored output yet
+
+`check run` keeps nothing on disk and hands back no id: a result is `passed` or `failed`, nothing more
+— no output on success, and no output on failure either. A follow-up task adds a per-invocation log
+folder under `.openrecord/logs/<id>/` (ignored by git, last N kept) and a command that reads one back by
+id; until then, a failing check's own output has to be reproduced by running its `command` by hand.
+
+Neither a check's own command nor a sandbox's `setup`/`start`/`exercise`/`stop` carry a timeout yet —
+only `ready` does (`ready.timeout`, defaulting to `60` seconds): without one, a sandbox that never comes
+up would hang `check run`/`sandbox run` forever. Timeouts for everything else are a separate, later
+task.
 
 ### Validations
 
@@ -551,6 +627,69 @@ openrecord sandbox remove api
 Refuses while some `checks.json` entry's `needs` still names it, and lists which — the same principle
 `actor remove`/`component remove` already follow for what still references them. Like every `sandbox`
 command, it refuses before touching the file when `sandbox.json` cannot be trusted.
+
+### `sandbox run` {#sandbox-run}
+
+Task 13b: the binary actually bringing a sandbox up, exercising it, and tearing it down — `sandbox
+add`/`sandbox edit` only ever declare how to.
+
+```
+openrecord sandbox run api
+openrecord sandbox run --files src/api/handlers/upload.go
+```
+
+**An id** (positional) runs that one sandbox. **`--files <file...>`** instead resolves every sandbox
+that `observes` a decision governing those files, `approximates` a quality anchor of a spec governing
+them, or is `needs`-ed by a check whose `enforces` covers a governing record — the same file →
+components → records chain `impact --files`/`check run --files` resolve. **Never** a sandbox's own
+`components` field: that would bring up a sandbox with no actual relationship to what is being changed.
+The two are mutually exclusive — an id or `--files`, never neither, never both.
+
+**Lifecycle, in order: `setup` → `start` → `ready` → `exercise` → `stop`.** `ready` polls `ready.http`
+until it answers `2xx`, up to `ready.timeout` seconds (`ready.log` — waiting for a line in `start`'s own
+output — is not implemented yet; a sandbox declaring it fails this step every time until a later task
+adds it, a deliberate, documented gap rather than a half-implemented attempt). `logs` is **not run** in
+this task (there is nowhere to put what it would capture — see "No logs or stored output yet" under
+[`#check`](#check)); the cycle this command runs is `setup → start → ready → exercise → stop`. Once any
+step fails, every later one before `stop` is reported `skipped` rather than attempted — **`stop` always
+actually runs**, so nothing is left up or listening because an earlier step failed.
+
+Every step runs through `sh -c`, with the repository root as its working directory, output discarded —
+the same execution `check run` uses. Validated first, over the whole store, exactly like `impact`.
+
+Output, one entry per sandbox:
+
+```json
+{
+  "id": "api",
+  "because": {
+    "observes": [ { "path": "decisions/api/uploads/size-limit.md", "status": "accepted", "description": "..." } ],
+    "approximates": [ { "anchor": "upload-speed", "measure": "p95 < 10s" } ],
+    "needed_by": ["e2e-api"]
+  },
+  "steps": [
+    { "step": "setup", "command": "docker compose up -d", "result": "ok", "seconds": 1.1 },
+    { "step": "ready", "http": "http://localhost:8080/health", "result": "ok", "seconds": 0.3 },
+    { "step": "exercise", "command": "k6 run upload.js", "result": "ok", "seconds": 9.8 },
+    { "step": "stop", "command": "docker compose down -v", "result": "ok", "seconds": 0.4 }
+  ]
+}
+```
+
+`because` only ever carries the keys that apply (`observes`, `approximates`, `needed_by`); with an id,
+it is computed the same way but against the **whole store**, since an explicit id already says which
+sandbox and there is no file list left to scope it by. With `--files`, the top level wraps every
+selected sandbox under `sandboxes`, alongside `files` — the same file→components map `impact --files`
+reports:
+
+```json
+{ "files": { "src/api/handlers/upload.go": ["api"] }, "sandboxes": [ { "id": "api", "because": {...}, "steps": [...] } ] }
+```
+
+**The exit code says whether the cycle completed — `setup` through `stop` with nothing failing — never
+whether the logs or the exercised output "look fine".** Reading a sandbox's output against what it
+`observes`, or a load number against its `MEASURE`, stays judgment, and judgment is not this command's
+job.
 
 ### Validations
 

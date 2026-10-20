@@ -79,6 +79,13 @@ var commands = []*Command{
 				Usage:   "openrecord check remove ID",
 				Run:     runCheckRemove,
 			},
+			{
+				Name:    "run",
+				Summary: "Run a check, or every check whose `enforces` covers a set of files — task 13b, the binary enforcing what impact only reports.",
+				Usage:   "openrecord check run [ID] [--files FILE...] [--per-change]",
+				Flags:   describes(checkRunFlags),
+				Run:     runCheckRun,
+			},
 		},
 	},
 	{
@@ -106,6 +113,13 @@ var commands = []*Command{
 				Summary: "Remove a sandbox, when no check still needs it.",
 				Usage:   "openrecord sandbox remove ID",
 				Run:     runSandboxRemove,
+			},
+			{
+				Name:    "run",
+				Summary: "Run a sandbox's lifecycle, or every sandbox a set of files' records call for — task 13b.",
+				Usage:   "openrecord sandbox run [ID] [--files FILE...]",
+				Flags:   describes(sandboxRunFlags),
+				Run:     runSandboxRun,
 			},
 		},
 	},

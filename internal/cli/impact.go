@@ -835,13 +835,35 @@ func runImpactFiles(env Env, files []string, only []string) error {
 		return errExitWithReport
 	}
 
-	declared, err := store.LoadComponents(env.Repo)
+	fileOwners, decisions, specs, err := filesGovernance(env.Repo, files)
 	if err != nil {
 		return err
 	}
-	coverage, _, err := check.ComputeCoverage(env.Repo)
+
+	output := impactOutput{
+		"files":     fileOwners,
+		"decisions": decisions,
+		"specs":     specs,
+	}
+	return env.WriteJSON(filterSections(output, "files", only))
+}
+
+// filesGovernance is `impact --files`'s own resolution, file → components →
+// records, factored out so `check run --files`/`sandbox run --files` (task
+// 13b) select against the identical chain rather than a parallel resolver:
+// every declared component containing each file, every decision filed
+// under one of those components, and every spec naming one of them plus,
+// one hop further, every quality spec that qualifies a spec already
+// included. Called only after a caller has already validated the whole
+// store with no error, exactly like runImpactFiles itself does.
+func filesGovernance(repo string, files []string) (map[string][]string, map[string][]fileDecisionRef, []fileSpecRef, error) {
+	declared, err := store.LoadComponents(repo)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
+	}
+	coverage, _, err := check.ComputeCoverage(repo)
+	if err != nil {
+		return nil, nil, nil, err
 	}
 
 	fileOwners := map[string][]string{}
@@ -858,21 +880,15 @@ func runImpactFiles(env Env, files []string, only []string) error {
 		}
 	}
 
-	decisions, err := buildFileDecisions(env.Repo, coverage, components)
+	decisions, err := buildFileDecisions(repo, coverage, components)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
-	specs, err := buildFileSpecs(env.Repo, coverage, components)
+	specs, err := buildFileSpecs(repo, coverage, components)
 	if err != nil {
-		return err
+		return nil, nil, nil, err
 	}
-
-	output := impactOutput{
-		"files":     fileOwners,
-		"decisions": decisions,
-		"specs":     specs,
-	}
-	return env.WriteJSON(filterSections(output, "files", only))
+	return fileOwners, decisions, specs, nil
 }
 
 // buildFileDecisions lists every decision filed under one of components,

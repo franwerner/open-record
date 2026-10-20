@@ -1,6 +1,6 @@
 ---
 name: openrecord-consult
-description: Find which durable records govern code before changing it. USE THIS SKILL before editing, adding, or refactoring any file in a project that has an `.openrecord/` store — before the first edit, not after. Also when asked what governs a file, what was decided about some area, whether an approach is allowed, or why the code is the way it is. And before changing, retiring or re-evaluating a record itself — when asked what depends on a record, or what changing or replacing one would affect.
+description: Find which durable records govern code before changing it, and run the project's checks against it before handing a change back. USE THIS SKILL before editing, adding, or refactoring any file in a project that has an `.openrecord/` store — before the first edit, not after — and again before calling a change finished, to verify it against the project's checks. Also when asked what governs a file, what was decided about some area, whether an approach is allowed, or why the code is the way it is. And before changing, retiring or re-evaluating a record itself — when asked what depends on a record, or what changing or replacing one would affect.
 ---
 
 # Consult the records before you write
@@ -145,6 +145,21 @@ below next to everything else you found.
 line that supports or contradicts it. When the answer is not visible in the code you are already
 reading, say it is not visible and move on. Stretching this step into a claim-by-claim pass over a
 whole record is how a walk stops being run at all, and that pass is a skill of its own anyway.
+
+**5. Before you hand back: run the checks.**
+
+```
+openrecord check run --files src/api/handlers/user.go
+```
+
+This is mechanical, not judgment — the same reason step 1 is a command and not a memory. It resolves
+the same file → components → records chain step 1 already did, selects every declared check whose
+`enforces` covers a record governing those files, completes `{files}` with what you actually touched,
+and runs them. **Exit `0` is the verdict** — every selected check passed; a nonzero exit means something
+still fails, and the fix belongs in the code, never in the check, the script it runs, or the record
+behind it. Use `--per-change` for a quicker loop while you are still editing (only the checks whose
+command takes `{files}`); run it without the flag — the full sweep — before you actually call the work
+done.
 
 ## Surfacing is not governing
 
