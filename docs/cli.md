@@ -35,7 +35,7 @@ without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial re
 | `level` | Create a concern or subgroup folder with its index. |
 | `record` | Write and edit records. |
 | `validate` | Check a coordinate is well-formed, recursively. |
-| `impact` | Report a record's full neighbourhood: every declared, validated link one hop away, and the full `depends-on` chain. |
+| `impact` | Report a record's full neighbourhood, or — with `--files` — which decisions and specs govern a set of code files. |
 | `grep` | Literal search, scoped to a store. |
 | `search` | Rank every scoped record against a context with Jev, and store the result for review. |
 | `diagram` | Emit a spec as Mermaid on stdout. |
@@ -848,12 +848,21 @@ hook without a second mode.
 
 ## `impact`
 
-Before changing or adding a record, something has to know what else is connected to it: what initiates
-it, what qualifies it, what serves and depends on it, what verifies it, and how covered it is. `impact`
-answers that by following the links the store already declared and validated — `components`, `actors`,
-`qualifies`, `serves`, `depends-on`, `enforces`, `needs`, `@record:` annotations, `approximates`,
-`VERIFIED-IN` — never by searching text. What it returns is complete because it **follows relations**,
-not because a search happened to match.
+`impact` has two modes, taking different input and answering different questions, over the same engine:
+
+- **Record mode** (`openrecord impact <record>`) — before changing or adding a record, what else is
+  connected to it: what initiates it, what qualifies it, what serves and depends on it, what verifies
+  it, and how covered it is.
+- **Files mode** (`openrecord impact --files <file...>`) — before changing code, which decisions and
+  specs govern the file(s) you are about to touch, and how they are checked.
+
+Both follow the links the store already declared and validated — `components`, `actors`, `qualifies`,
+`serves`, `depends-on`, `enforces`, `needs`, `@record:` annotations, `approximates`, `VERIFIED-IN` —
+never by searching text. What either mode returns is complete because it **follows relations**, not
+because a search happened to match. Neither mode runs anything: reading checks off the store and
+actually executing them is a separate concern, for a command of its own.
+
+### Record mode
 
 ```
 openrecord impact decisions/api/data/postgres.md
@@ -884,7 +893,7 @@ openrecord impact decisions/api/data/postgres.md
     }
   ],
   "verified_by": [],
-  "annotations": { "whole_record": [] }
+  "annotated_in": []
 }
 ```
 
@@ -898,17 +907,19 @@ yet.
 ### Validate runs first, over the whole store
 
 A neighbourhood built on top of a store with an error anywhere is not trustworthy — the error may well
-be a decision this very record is served by. So `impact` runs `check.Store` (the same engine `validate`
-runs) over the **whole** store before building anything, not only the record's own corner of it:
+be a decision this very record is served by. So **both modes** run `check.Store` (the same engine
+`validate` runs) over the **whole** store before building anything, not only the record's or the
+files' own corner of it:
 
 | Situation | What `impact` does |
 | --- | --- |
-| The argument does not name a record in the store | Usage error (`record-not-found`), exit 2 |
-| `validate` finds an `error` anywhere in the store | Refuses: exit 1, the same `findings` shape `validate` emits, no neighbourhood |
-| `validate` finds only `warning`s (`quality-unverified`, `unmarked-actor-mention`) | Does not block: the neighbourhood builds normally |
-| `checks.json` / `sandbox.json` / `actors.json` does not exist | A normal state, not an error — the corresponding section is just empty |
+| Record mode: the argument does not name a record in the store | Usage error (`record-not-found`), exit 2 |
+| Either mode: `validate` finds an `error` anywhere in the store | Refuses: exit 1, the same `findings` shape `validate` emits, no neighbourhood |
+| Either mode: `validate` finds only `warning`s (`quality-unverified`, `unmarked-actor-mention`) | Does not block: the neighbourhood builds normally |
+| Either mode: `checks.json` / `sandbox.json` / `actors.json` does not exist | A normal state, not an error — the corresponding section is just empty |
 
-A refused run reports only the raw argument and the findings, never a partial neighbourhood:
+A refused run reports only the raw argument(s) and the findings, never a partial neighbourhood — record
+mode under `"record"`, files mode under `"files"`:
 
 ```json
 {
@@ -923,14 +934,15 @@ A refused run reports only the raw argument and the findings, never a partial ne
 ### Depth: one hop, except `depends-on`
 
 Every link stops at one hop — `qualified_by`, `qualifies`, `served_by`/`serves`, `verified_by`,
-`annotations` — because a second hop already drags in a large, unfocused slice of the store. The one
-exception is `depends-on`, followed as a **full chain**, in **both directions**, in separate fields:
-`depends_on` (what the record rests on, upward) and `dependents` (what rests on the record, downward —
-what has to be re-evaluated if it changes). `validate` forbids a cycle in `depends-on`, so the chain
-always terminates. Inside `served_by`, each serving decision carries its own `depends_on`/`dependents`
-chains — the one place a chain nests inside something other than the record `impact` was asked about.
+`annotated_in`, `scenarios` — because a second hop already drags in a large, unfocused slice of the
+store. The one exception is `depends-on`, followed as a **full chain**, in **both directions**, in
+separate fields: `depends_on` (what the record rests on, upward) and `dependents` (what rests on the
+record, downward — what has to be re-evaluated if it changes). `validate` forbids a cycle in
+`depends-on`, so the chain always terminates. Inside `served_by`, each serving decision carries its own
+`depends_on`/`dependents` chains — the one place a chain nests inside something other than the record
+`impact` was asked about.
 
-### Sections, by record type
+### Sections, by record type (record mode)
 
 Every section has the same name and shape everywhere it appears; one that does not apply to the
 record's type is **omitted entirely** (the key is absent), never reported empty — an applicable section
@@ -938,9 +950,9 @@ with nothing in it is an empty array or object instead.
 
 | Record | Sections |
 | --- | --- |
-| Functional spec (`flow`, `rule`, `lifecycle`, `process`) | `initiated_by` (only `flow`/`process`) · `qualified_by` · `served_by` (+ `depends_on`/`dependents` of each serving decision) · `verified_by` · `annotations` · `qualities` |
-| `quality` spec | `qualifies` · `served_by` (+ chains) · `verified_by` · `annotations` · `qualities` (its own scenarios) |
-| Decision | `serves` · `depends_on` · `dependents` · `verified_by` · `annotations` |
+| Functional spec (`flow`, `rule`, `lifecycle`, `process`) | `initiated_by` (only `flow`/`process`) · `qualified_by` (each entry carrying its own `verification`) · `served_by` (+ `depends_on`/`dependents` of each serving decision) · `verified_by` · `annotated_in` · `scenarios` |
+| `quality` spec | `qualifies` · `served_by` (+ chains) · `verified_by` · `annotated_in` · `scenarios` · `verification` (its own scenarios) |
+| Decision | `serves` · `depends_on` · `dependents` · `verified_by` · `annotated_in` |
 
 **`initiated_by`** is every actor in `initiated-by`, resolved against `actors.json` — `{id, kind,
 description}`. A `lifecycle`, a `rule`, a `quality` spec and a decision never declare `initiated-by`, so
@@ -948,7 +960,8 @@ the key is absent on them.
 
 **`qualified_by`** is every `quality` spec whose `qualifies` names this functional spec — the inverse of
 `qualifies`, computed fresh rather than written anywhere — each paired with which of this spec's anchors
-it qualifies: an empty list means the whole spec.
+it qualifies (an empty list means the whole spec) and, since a functional spec reports no `verification`
+of its own, that quality spec's own `verification`, anchor by anchor — see below.
 
 **`qualifies`**, on a `quality` spec, is its own declared targets: the functional spec(s) it
 characterizes, each with the one anchor it names, when it names one.
@@ -963,29 +976,126 @@ it exists because of, and the full `depends-on` chain in both directions.
 a group coordinate containing it — as `{id, command}` plus `needs` (a sandbox id) when the check
 declares one. The sandbox itself is never expanded; `needs` only names it.
 
-**`annotations`** is this record's `@record:` cross, from the same engine `validate`'s own annotation
-scan uses: `whole_record` is every annotation naming the record with no `#anchor` — the only kind a
-decision or an anchor-less spec can have — and `anchors` (present only when the record has at least one
-anchor) adds, per anchor, which annotations name it:
+**`annotated_in`** is every `@record:` annotation naming this record whole, with no `#anchor` — the only
+kind a decision or an anchor-less spec can have — from the same engine `validate`'s own annotation scan
+uses:
 
 ```json
-"annotations": {
-  "whole_record": ["tests/signup.spec.ts:1"],
-  "anchors": [
-    { "anchor": "account-is-created", "annotated_in": ["tests/signup.spec.ts:2"] }
-  ]
+"annotated_in": ["tests/signup.spec.ts:1"]
+```
+
+**`scenarios`** (present only on a record with at least one anchor) is a map from each anchor to every
+`@record:#anchor` annotation naming it, `[]` meaning no annotated test yet:
+
+```json
+"scenarios": {
+  "account-is-created": ["tests/signup.spec.ts:2"]
 }
 ```
 
 An annotation only **declares** what a test or a rule intends to verify — it is never evidence that the
 test passed, or even that it still exists.
 
-**`qualities`** is one entry per scenario anchor of every `quality` spec in `qualified_by` (or, on a
-`quality` spec itself, its own scenario anchors): `{anchor, checks, sandboxes, verified_in}` — `checks`
-is every check enforcing that `quality` spec whole, `sandboxes` is every sandbox whose `approximates`
-names that exact anchor, and `verified_in` is the scenario's own `VERIFIED-IN` value, when it declares
-one. All three empty or absent is the same state `quality-unverified` warns about: nobody has said how
-the scenario is verified at all.
+**`verification`** is a map from each of a `quality` spec's own scenario anchors to its verification
+state: `{checks, sandboxes, verified_in}` — `checks` is every check (full `{id, command, needs?}`
+objects) enforcing that `quality` spec whole, `sandboxes` is every sandbox whose `approximates` names
+that exact anchor, and `verified_in` is the scenario's own `VERIFIED-IN` value, when it declares one.
+All three empty or absent is the same state `quality-unverified` warns about: nobody has said how the
+scenario is verified at all. On a `quality` spec itself it is a top-level section; on a functional spec
+it is nested inside each `qualified_by` entry instead, because it only ever makes sense attached to the
+quality spec it describes:
+
+```json
+"qualified_by": [
+  { "path": "specs/quality/sign-up-speed.md", "status": "accepted",
+    "description": "Sign-up stays fast under load.", "qualifies": [],
+    "verification": {
+      "fast-enough": { "checks": [], "sandboxes": ["load-sandbox"] }
+    } }
+]
+```
+
+### Files mode
+
+```
+openrecord impact --files src/api/handlers/upload.go src/web/upload/form.tsx
+```
+
+`--files` takes one or more files: every argument after it, up to the next flag, is its own file —
+`--files a.go b.go c.go`, not just the first. Repeating the flag (`--files a.go --files b.go`) or
+comma-separating one occurrence (`--files a.go,b.go`) work the same way; pick whichever reads better.
+
+```json
+{
+  "files": {
+    "src/api/handlers/upload.go": ["api", "root"],
+    "src/web/upload/form.tsx": ["root", "web"]
+  },
+  "decisions": {
+    "root": [
+      { "path": "decisions/root/structure/go.md", "status": "accepted",
+        "description": "The service is written in Go.",
+        "verified_by": [ { "id": "lint-go", "command": "golangci-lint run {files}" } ],
+        "annotated_in": [] }
+    ]
+  },
+  "specs": [
+    { "path": "specs/flow/upload-file.md", "status": "accepted",
+      "description": "A visitor uploads a file through the API and sees it in the web UI.",
+      "components": ["api", "web"],
+      "verified_by": [ { "id": "e2e-upload", "command": "go test ./e2e/upload/..." } ],
+      "annotated_in": [],
+      "scenarios": {
+        "upload-succeeds": ["tests/upload.spec.ts:1"],
+        "format-not-allowed": []
+      } }
+  ]
+}
+```
+
+**`files`** maps every requested path — normalised the same way `component owners` normalises one — to
+every component whose declared path **contains** it, not only the most specific: a component declared
+as `.` (root) covers every path by the same mechanism a narrower one covers its own, so both appear at
+once rather than one hiding the other. `[]` means the path is outside every declared component, never
+an error; a path that does not exist on disk yet still resolves, because resolution is by path, not by
+what is already written.
+
+**`decisions`** groups every decision filed under a component that owns at least one requested file, by
+that component's id — a decision belongs to exactly one component, the folder it is filed under, so
+there is nothing to deduplicate across keys. Each decision carries `path`, `status`, `description`,
+`verified_by` and `annotated_in` — never `depends_on`/`dependents`/`serves`, which are relations between
+decisions, not what a block of files has to respect; ask record mode for those.
+
+**`specs`** is every spec naming at least one of those components, plus — one hop further — every
+`quality` spec whose `qualifies` names a spec already included that way, even when that `quality` spec's
+own `components` names none of them: a quality spec is rarely filed under the same component as what it
+qualifies, and the hop is what keeps it from being missed. Each spec appears exactly once, with its own
+`components`, `verified_by`, `annotated_in` and (when it has anchors) `scenarios`; a `quality` spec also
+carries `qualifies` (its own declared targets, as written) and `verification` (its own scenarios' states,
+the same shape record mode nests inside `qualified_by`).
+
+Nothing is repeated except a check's own object, when the same check verifies more than one of the
+decisions or specs returned.
+
+### `--only`: trimming the sections returned
+
+`--only <names>` (comma-separated) keeps just the sections named, in both modes. The identity key
+(`record` or `files`) always stays, whether or not `--only` names it — it is never something a caller
+opts into. A name that is not a valid section for that mode is a usage error, not a silent no-op:
+
+```
+openrecord impact specs/flow/sign-up.md --only verified_by,annotated_in
+openrecord impact --files src/api/handlers/upload.go --only specs
+```
+
+### Which mode to use
+
+Reach for **record mode** when you have a record in hand and need its neighbourhood — writing or
+reviewing a decision or a spec, checking what a status change would ripple into. Reach for **files
+mode** when you have code in hand and need to know what governs it before you touch it — the walk
+`openrecord-consult` runs before an edit. Neither mode runs a check, completes a `{files}` placeholder,
+or starts a sandbox; reading what applies and actually verifying it are different jobs, and running
+checks belongs to a command of its own.
 
 ### What `impact` never follows
 
@@ -999,8 +1109,8 @@ deterministic command can decide.
 | Exit | Meaning |
 | --- | --- |
 | `0` | The neighbourhood was built — possibly with warnings earlier in `validate`'s own pass. |
-| `1` | `validate` found an `error` somewhere in the store; the findings are on stdout, no neighbourhood. |
-| `2` | The argument does not name a record in the store at all — a usage error, same as an unknown command. |
+| `1` | `validate` found an `error` somewhere in the store, or the arguments were invalid in some other way (a bad `--only` name, `--files` combined with a record path, or neither given); the findings or the usage error are reported, no neighbourhood. |
+| `2` | Record mode only: the argument does not name a record in the store at all — a usage error, same as an unknown command. |
 
 ---
 

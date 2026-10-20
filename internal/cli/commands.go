@@ -151,8 +151,9 @@ var commands = []*Command{
 	},
 	{
 		Name:    "impact",
-		Summary: "Report a record's full neighbourhood: what initiates it, qualifies it, serves and depends on it, verifies it, and how covered it is.",
-		Usage:   "openrecord impact PATH",
+		Summary: "Report a record's full neighbourhood, or — with --files — which decisions and specs govern a set of code files.",
+		Usage:   "openrecord impact PATH [--only SECTIONS] | openrecord impact --files FILE... [--only SECTIONS]",
+		Flags:   describes(impactFlags),
 		Run:     runImpact,
 	},
 	{

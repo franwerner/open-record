@@ -138,18 +138,45 @@ func (s Components) IDs() []string {
 // closed by component — a file governed by two components' decisions would
 // contradict the isolation the format is built on.
 func (s Components) OwnerOf(path string) (string, bool) {
-	path = normalisePath(path)
+	path = NormalisePath(path)
 	owner := ""
 	longest := -1
 	for _, component := range s.Components {
 		for _, declared := range component.Paths {
-			length, ok := prefixLength(normalisePath(declared), path)
+			length, ok := prefixLength(NormalisePath(declared), path)
 			if ok && length > longest {
 				owner, longest = component.ID, length
 			}
 		}
 	}
 	return owner, longest >= 0
+}
+
+// OwnersOf reports every component whose declared paths contain a
+// repository-relative path — not only the longest-prefix match OwnerOf
+// picks. `impact --files` (task 13) needs every component that governs a
+// file, because a file can sit under several declared surfaces at once —
+// root, declared as ".", covers everything the same way a more specific
+// component does, and both apply simultaneously rather than one winning
+// over the other.
+//
+// Resolution is by path alone, the same as OwnerOf: a path that does not
+// exist on disk yet still resolves, because a file about to be created is
+// exactly what a caller planning work needs an answer for. nil (not an
+// error) when no declared component contains it at all.
+func (s Components) OwnersOf(path string) []string {
+	path = NormalisePath(path)
+	var owners []string
+	for _, component := range s.Components {
+		for _, declared := range component.Paths {
+			if _, ok := prefixLength(NormalisePath(declared), path); ok {
+				owners = append(owners, component.ID)
+				break
+			}
+		}
+	}
+	sort.Strings(owners)
+	return owners
 }
 
 // OutsideScope returns the paths belonging to no component in the given scope.
@@ -195,7 +222,7 @@ func (s Components) Validate(repo string) []finding.Finding {
 			continue
 		}
 		for _, declared := range component.Paths {
-			target := filepath.Join(repo, filepath.FromSlash(normalisePath(declared)))
+			target := filepath.Join(repo, filepath.FromSlash(NormalisePath(declared)))
 			if info, err := os.Stat(target); err != nil || !info.IsDir() {
 				// Silent by nature: a component owning nothing simply never
 				// matches a file, so nothing fails — it just stops covering.
@@ -207,7 +234,12 @@ func (s Components) Validate(repo string) []finding.Finding {
 	return findings
 }
 
-func normalisePath(value string) string {
+// NormalisePath puts a repository-relative path into the one form every
+// comparison here is made against: forward slashes, no leading "./", no
+// leading or trailing "/", and "." (the repository root) collapsed to "" so
+// it compares equal to the empty prefix prefixLength already treats as
+// covering everything.
+func NormalisePath(value string) string {
 	value = strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(value)), "./")
 	value = strings.Trim(value, "/")
 	if value == "." {

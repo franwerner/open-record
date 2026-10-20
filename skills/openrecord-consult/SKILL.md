@@ -36,61 +36,38 @@ guessed from memory or a search that cannot prove it found everything.
 
 ## The walk
 
-**1. Which surface are you touching?**
+**1. Which decisions and specs govern these files?**
 
 ```
-openrecord component owners src/api/handlers/user.go
-→ owner: api
-  map:   decisions/api
-  specs: specs/flow/checkout/place-an-order.md
-         specs/rule/usage-limits.md
+openrecord impact --files src/api/handlers/user.go
+→ { "files": { "src/api/handlers/user.go": ["api"] },
+    "decisions": { "api": [
+      { "path": "decisions/api/security/rate-limits/at-the-gateway.md", "status": "accepted",
+        "description": "...", "verified_by": [...], "annotated_in": [...] } ] },
+    "specs": [
+      { "path": "specs/flow/checkout/place-an-order.md", "components": ["api"], "status": "accepted",
+        "description": "...", "verified_by": [...], "annotated_in": [...], "scenarios": {...} },
+      { "path": "specs/rule/usage-limits.md", "components": ["api"], ... } ] }
 ```
 
-Returns the component that owns the path. If it reports that nothing is declared, stop and say so —
-without a declared surface there is nothing to check against, and guessing which component a file
-belongs to defeats the whole mechanism.
+Pass every file you are about to touch in one call — `--files a.go b.go`, several at once — so whatever
+is shared across them comes back once, not duplicated per file. If it reports an error (an
+`error`-severity finding anywhere in the store), stop and say so — a neighbourhood built on top of a
+broken store is not trustworthy, and resolving by guesswork instead defeats the whole mechanism.
 
-**It answers both halves.** `map` is where the decisions governing this file are filed. `specs` is every
-capability that declares this surface — those cannot be resolved from a path, because a capability
-crosses surfaces and names them instead of living under one. Both lists are the starting point, not the
-answer: descending is still what enumerates.
+**It answers both halves in one call.** `files` names every declared component whose path contains
+each file — not only the most specific; a component declared as `.` (root) governs everything by the
+same mechanism a narrower one does, so both can apply at once. `decisions` is every decision filed
+under one of those components; `specs` is every capability naming one of them, plus any quality spec
+that qualifies one of those capabilities even if it names no component in common — those relations
+cannot be resolved from a path alone, which is why they are not part of `files` itself. Each decision
+and spec already carries its own `verified_by`, `annotated_in` and (when it has anchors) `scenarios` —
+not raw candidates you still have to open to know whether they apply.
 
-**2. Descend, reading descriptions.**
+If `impact --files` reports no owner at all for a path (`[]`), that path is outside every declared
+surface — a gap worth saying, not a reason to guess which component it belongs to.
 
-Each level returns the `title` and `description` of everything hanging off it, plus a `kind` — `group`
-means descend, `record` means open. The descriptions arrive in the response; you never open an index
-yourself.
-
-```
-openrecord map --for decisions/api
-→ [group] security   "Auth, permissions, limits. Descend if you touch who may do what."
-  [group] runtime    "Errors, retries, caching. Descend if you touch error propagation."
-  [group] data       "Queries and the storage model."
-
-openrecord map --for decisions/api/security
-→ [group]  rate-limits    "How limits are computed and applied."
-  [record] token-identity "Identity travels in a signed token…"
-
-openrecord map --for decisions/api/security/rate-limits
-→ [record] …
-```
-
-**Descend into every level whose description matches what you are about to do — not the one that
-matches best.** Adding rate limiting to a handler touches `security`, and it also touches `runtime`,
-because the 429 is an error response. Picking one is the most common way to miss the record that
-governs you.
-
-The descent bottoms out on its own: a subgroup is capped at one level, so there is never a third
-step down.
-
-**Descending is cheap; opening is not.** A level costs a few hundred tokens of titles and descriptions
-— less than reading one record. So when in doubt, descend, and be selective about what you open.
-
-**Stop when every branch you descended reached records and you decided open-or-not on each.** Not when
-you found something: finding one record tells you nothing about whether a neighbouring concern holds
-another.
-
-**3. Search.**
+**2. Search.**
 
 ```
 openrecord search --for decisions/api --literal "rate limit" \
@@ -150,9 +127,9 @@ for* — comes from reading the indexes on the way down, because a record that n
 leaves no trace of its absence. Search is for locating quickly. It is never the evidence that nothing
 was missed.
 
-**4. Read the ones that govern you.** Fully. A record is prose written to be understood, not scanned.
+**3. Read the ones that govern you.** Fully. A record is prose written to be understood, not scanned.
 
-**5. Check each one against the code in front of you.** Only the ones you just decided govern this
+**4. Check each one against the code in front of you.** Only the ones you just decided govern this
 work — one or two, never everything that surfaced.
 
 You are holding both sides already. The record is open, and the file you came here to change is the
@@ -178,8 +155,7 @@ They find different things, which is why none of them travels alone:
 
 | | Finds | Misses |
 | --- | --- | --- |
-| `component owners` | Which surface the file is in, and every capability that names it. | Nothing about *which* of them applies. |
-| The descent | Everything filed under the concerns you entered. The only one that *enumerates*. | What sits in a concern you did not think to enter. |
+| `impact --files` | Every decision and spec whose declared containment covers the file(s) — the only one that *enumerates* by declared relation. | Anything about the same area that is not reachable by component or `qualifies` — a record filed elsewhere because of an earlier author's different judgement call. |
 | `search` | Exact wording (`--literal`), meaning (`--semantic`), and a ranking of everything in scope against `--context`. | Nothing in scope — ranking can leave a low-scoring record out of `records`, but it is always in `discarded`, never gone. |
 
 **Then comes the part no command can do: deciding which of them actually governs your work.** A record
@@ -195,7 +171,7 @@ Governs this work:
 
 - decisions/api/security/rate-limits/at-the-gateway.md        [accepted]
   Constrains you: the limit lives in the gateway; do not add per-handler checks.
-  Surfaced by: descent (api/security)
+  Surfaced by: impact --files (src/api/handlers/user.go)
   Still true of the code: no — src/api/handlers/users.go:88 keeps a counter of
   its own. Reporting it, not resolving it.
 

@@ -132,6 +132,41 @@ func TestOwnerOfReportsAnUnownedPath(t *testing.T) {
 	}
 }
 
+func TestOwnersOfReturnsEveryContainingComponent(t *testing.T) {
+	set := Components{Components: []Component{
+		{ID: "api", Paths: []string{"src/api"}},
+		{ID: "root", Paths: []string{"."}},
+		{ID: "handlers", Paths: []string{"src/api/handlers"}},
+	}}
+	cases := map[string][]string{
+		"src/api/handlers/user.go": {"api", "handlers", "root"},
+		"src/api/server.go":        {"api", "root"},
+		"Makefile":                 {"root"},
+	}
+	for path, want := range cases {
+		got := set.OwnersOf(path)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("OwnersOf(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+func TestOwnersOfReportsAnUnownedPathAsEmpty(t *testing.T) {
+	set := Components{Components: []Component{{ID: "api", Paths: []string{"src/api"}}}}
+	if got := set.OwnersOf("docs/readme.md"); len(got) != 0 {
+		t.Errorf("OwnersOf on an unowned path = %v, want none", got)
+	}
+}
+
+func TestOwnersOfResolvesByPathAlone(t *testing.T) {
+	// A file that does not exist yet still resolves — impact --files (task
+	// 13) accepts a path about to be created, never requiring it on disk.
+	set := Components{Components: []Component{{ID: "api", Paths: []string{"src/api"}}}}
+	if got := set.OwnersOf("src/api/not-written-yet.go"); !reflect.DeepEqual(got, []string{"api"}) {
+		t.Errorf("OwnersOf on a nonexistent path = %v, want [api]", got)
+	}
+}
+
 func TestLoadComponentsDistinguishesItsFailures(t *testing.T) {
 	repo := t.TempDir()
 	if _, err := LoadComponents(repo); err == nil {

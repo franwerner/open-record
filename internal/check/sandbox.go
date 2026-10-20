@@ -15,7 +15,7 @@ import (
 // `approximates` names specPath#anchor exactly, sorted by id — the same
 // per-reference resolution qualityCoverage already performs, exposed here
 // for a caller that needs the sandboxes themselves, like `impact` (issue
-// 12)'s `qualities`. A store with no sandbox.json yet contributes nothing,
+// 12)'s `verification`. A store with no sandbox.json yet contributes nothing,
 // the same benign absence qualityCoverage already treats as normal.
 func ApproximatingSandboxes(repo, specPath, anchor string) ([]store.Sandbox, error) {
 	sandboxes, err := store.LoadSandboxes(repo)
