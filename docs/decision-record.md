@@ -549,14 +549,14 @@ What you accept by choosing this — the cost that came with the benefit.
 
 A decision does not repartition its content into addressable parts the way a [capability
 spec](capability-spec.md#anchors) does for a scenario or a transition: it is one undivided statement, a
-*what* and a *why*, and there is nothing narrower than the whole file to point at. The same holds for a
-`rule` spec — see [capability-spec.md](capability-spec.md#anchors).
+*what* and a *why*, and there is nothing narrower than the whole file to point at. A `rule` spec is not
+the same: its `## Rule` statement is undivided, but its scenarios anchor like any spec's — see
+[capability-spec.md](capability-spec.md#anchors).
 
-So a reference to either one names the file and stops there, with no `#`:
+So a reference to a decision names the file and stops there, with no `#`:
 
 ```
 decisions/api/structure/layers.md
-specs/rule/usage-limits.md
 ```
 
 ## Recording a deliberate absence
