@@ -27,7 +27,7 @@ what should be written and you write it.
 | The *why* came from | Who confirms |
 | --- | --- |
 | Work you just did — **this skill** | Nobody. You resolve it and write it, then report. |
-| The user, answering questions — `openrecord-bootstrap` | They do, record by record. |
+| The user, answering questions — `openrecord-onboard` | They do, record by record. |
 | The existing code — `openrecord-mine` | They do, over candidates. Nothing is materialised unconfirmed. |
 
 The line is authorship, not caution. Here you have the reasoning first-hand, because you did the work.

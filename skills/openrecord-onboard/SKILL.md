@@ -1,5 +1,5 @@
 ---
-name: openrecord-bootstrap
+name: openrecord-onboard
 description: Populate an empty openrecord store by interviewing the user. USE THIS SKILL when a project has no `.openrecord/` store or an empty one and the user wants to define its components, its engineering decisions, or its behaviour from scratch — a project starting out, or a codebase whose decisions live only in people's heads. Also when the user says "set up openrecord", "define our decisions", or "let's write down what we decided".
 ---
 
@@ -10,6 +10,20 @@ the decisions were made by people, and the reasoning is the part that only they 
 
 **Never create a store because you noticed one is missing.** Offer, and only if the user is heading
 somewhere it would help. A project without records is not a broken project.
+
+## The interview, in order
+
+1. **Components** — the folder vocabulary every decision and spec is scoped to.
+2. **Actors** — who or what starts things, declared before the flows and processes that need them.
+3. **Behaviour** — flows, processes, rules and lifecycles: what the system does.
+4. **Decisions** — walking the concerns catalogue, now that there is behaviour already on the books to
+   tie them to.
+5. **Quality** — thresholds on behaviour already written, where a requirement needs one.
+
+This order matters: a `flow` or `process` spec requires `initiated-by`, so actors have to exist first,
+and `--serves` on a decision is easiest to fill in once the spec it points at is already on the books,
+rather than guessed at as "about to be written". After each record, still ask how it will be verified
+before writing it (check, sandbox, or a declared `VERIFIED-IN`) — that step does not move.
 
 ## Components come first, and the user names them
 
@@ -40,6 +54,67 @@ work belongs.
 Include a component for the repository itself — tooling, CI, configuration. Without it, work on those
 files sits outside every declared surface forever.
 
+**Refining a description once it already exists is `component edit`, never a hand-edit.** The title and
+description live in `decisions/<id>/INDEX.md`, and that file is as much the binary's to write as any
+other — open it to read the current wording back to the user, but change it only with:
+
+```
+openrecord component edit api \
+  --description "The HTTP surface. Descend here if you touch endpoints, the payment webhook, or presigned-URL issuance."
+```
+
+`--title` works the same way; give either one, or both, and the other stays as it was. There is no
+`--path` here — moving what a component owns is a separate, riskier decision than wording.
+
+## Actors, before the flows and processes that need them
+
+A `flow` names which **human** starts it, and a `process` names which **external system or time**
+triggers it, in `initiated-by` — declared in `actors.json` first:
+
+```
+openrecord actor add administrator --kind human --description "Manages users and content."
+```
+
+Ask who, in the user's own words — "a visitor", "an administrator", "the payment provider's webhook" —
+the same way you ask for components: do not invent a name they have not used.
+
+**Mark every mention**, in a spec or a decision, as `@actor:<id>` — the first time `initiated-by` names
+an actor, the body has to say so at least once this way, and anywhere else the actor comes up is worth
+marking too, so a later reader can find every record that talks about it.
+
+**If the user's wording does not match a declared actor or alias**, do not quietly invent a new actor
+for it. Use the existing one, and if the wording is worth keeping as a synonym, propose adding it as an
+alias (`openrecord actor edit <id> --alias <word>`) rather than silently treating it as the same thing.
+
+## Behaviour is a different interview
+
+Capability specs are not decisions and the questions are not the same. For behaviour, ask what the
+system *does*: what an actor triggers, what happens on the happy path, what happens when it goes
+differently, and what the limits are.
+
+The test for whether something belongs in a spec: try writing it as **GIVEN / WHEN / THEN** with an
+observable outcome. If the THEN is something a user sees, it is a spec. If it is something about how
+the code is arranged, it is a decision.
+
+Pick the type from what the thing is:
+
+- an operation an actor triggers → `flow`
+- a rule that holds across several flows → `rule`
+- an entity's states and what moves between them → `lifecycle`
+- work triggered by an event rather than an actor → `process`
+
+A percentile, a load or a measurement window on behaviour one of the above describes — never a plain
+per-case yes or no — is a different type, `quality`, asked about later once there is something to
+qualify (see "Quality specs" below).
+
+**Before writing, check `openrecord verification <key>`** — the spec type and aspect (`flow/main-flow`,
+`lifecycle/transitions`...). It says what the record needs to contain to be verifiable, and where that
+kind of claim typically lands. Suggest a verification approach if the person hasn't named one, but never
+pick a tool for them. If it lands `on-change` or `pre-merge` and the person already named the concrete
+tool, register it with `openrecord check add` (see the decision interview below); never for a
+`pre-release`, `production` or `manual` verification — that stays a `VERIFIED-IN` line or the record's
+own prose.
+
 ## Then walk the catalogue and ask
 
 ```
@@ -62,6 +137,9 @@ Ask for the trade-off too. A choice with no rejected alternative is a convention
 choice with one is a decision, and the alternative is often the most useful thing in the record two
 years later.
 
+There may already be specs on the books by now — ask whether this decision exists because of one of
+them. That is what fills `--serves` when you write it (see "Writing what they tell you" below).
+
 **Before writing the decision, check how it would be verified.** `openrecord verification
 <concern>/<topic>` (for example `openrecord verification security/rate-limiting`) says what the record
 needs to contain to be checkable at all, and where that kind of decision typically lands (`on-change`,
@@ -79,60 +157,28 @@ through a live environment, a review against real output — register how it is 
 with `openrecord sandbox add <id> --description "<what it's for>" --observes <this decision> ...`. Same
 rule: register what the person describes, never pick the tool yourself.
 
-## Behaviour is a different interview
+## Quality specs, once there is something to qualify
 
-Capability specs are not decisions and the questions are not the same. For behaviour, ask what the
-system *does*: what an actor triggers, what happens on the happy path, what happens when it goes
-differently, and what the limits are.
+A `quality` spec does not stand on its own: it is a percentile, a load or a measurement window on
+behaviour a `flow`, `rule`, `lifecycle` or `process` already describes, linked to it with `qualifies`.
+Ask about it once that spec exists, which is why it comes last.
 
-The test for whether something belongs in a spec: try writing it as **GIVEN / WHEN / THEN** with an
-observable outcome. If the THEN is something a user sees, it is a spec. If it is something about how
-the code is arranged, it is a decision.
+Say how it is verified: a target checked outside the repo (a nightly load test in CI, an SLO, a manual
+review) goes on a `VERIFIED-IN pre-release|production|manual — <where>` line, declared as intent even
+before that test exists; something rerunnable with the same result each time is a check.
 
-Pick the type from what the thing is:
-
-- an operation an actor triggers → `flow`
-- a rule that holds across several flows → `rule`
-- an entity's states and what moves between them → `lifecycle`
-- work triggered by an event rather than an actor → `process`
-- a percentile, a load or a measurement window on behaviour one of the above already describes, never
-  a plain per-case yes or no → `quality`, linked to it with `qualifies` Say how it is verified: a target checked outside the repo (a nightly load test in CI, an SLO, a
-  manual review) goes on a `VERIFIED-IN pre-release|production|manual — <where>` line, declared as
-  intent even before that test exists; something rerunnable with the same result each time is a check.
-
-**Before writing, check `openrecord verification <key>`** — the spec type and aspect for a functional
-spec (`flow/main-flow`, `lifecycle/transitions`...), or the attribute for a `quality` spec (`latency`,
-`accessibility`...). It says what the record needs to contain to be verifiable, and where that kind of
-claim typically lands. Suggest a verification approach if the person hasn't named one, but never pick a
-tool for them. If it lands `on-change` or `pre-merge` and the person already named the concrete tool,
-register it with `openrecord check add` (see the decision interview above); never for a `pre-release`,
-`production` or `manual` verification — that stays a `VERIFIED-IN` line or the record's own prose.
+**Before writing, check `openrecord verification <attribute>`** (`latency`, `accessibility`...). It
+says what the record needs to contain to be verifiable, and where that kind of claim typically lands.
+Suggest a verification approach if the person hasn't named one, but never pick a tool for them. If it
+lands `on-change` or `pre-merge` and the person already named the concrete tool, register it with
+`openrecord check add` (see the decision interview above); never for a `pre-release`, `production` or
+`manual` verification — that stays a `VERIFIED-IN` line or the record's own prose.
 
 A `quality` scenario's threshold is the one exception worth registering even though it lands
 `pre-release`: if the person describes a local load test for it, register the environment with
 `openrecord sandbox add <id> --description "<what it's for>" --approximates
 specs/quality/<name>.md#<anchor> ...` — never the load test itself in `checks.json`. It approximates
 the threshold (detects a regression, catches gross problems) and never certifies it.
-
-### Actors come before the flows that need them
-
-A `flow` names which **human** starts it, and a `process` names which **external system or time**
-triggers it, in `initiated-by` — declared in `actors.json` first:
-
-```
-openrecord actor add administrator --kind human --description "Manages users and content."
-```
-
-Ask who, in the user's own words — "a visitor", "an administrator", "the payment provider's webhook" —
-the same way you ask for components: do not invent a name they have not used.
-
-**Mark every mention**, in a spec or a decision, as `@actor:<id>` — the first time `initiated-by` names
-an actor, the body has to say so at least once this way, and anywhere else the actor comes up is worth
-marking too, so a later reader can find every record that talks about it.
-
-**If the user's wording does not match a declared actor or alias**, do not quietly invent a new actor
-for it. Use the existing one, and if the wording is worth keeping as a synonym, propose adding it as an
-alias (`openrecord actor edit <id> --alias <word>`) rather than silently treating it as the same thing.
 
 ## Writing what they tell you
 

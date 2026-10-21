@@ -22,7 +22,7 @@ because the user said "go ahead" about a different candidate.
 | The *why* came from | Who confirms |
 | --- | --- |
 | The existing code — **this skill** | They do, over candidates. Nothing is materialised unconfirmed. |
-| The user, answering questions — `openrecord-bootstrap` | They do, record by record. |
+| The user, answering questions — `openrecord-onboard` | They do, record by record. |
 | Work you just did — `openrecord-capture` | Nobody. It resolves and writes, then reports. |
 
 The line is authorship, not caution. Capture has the reasoning first-hand. Here the code cannot tell you

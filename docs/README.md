@@ -60,7 +60,7 @@ judgement:
 | `openrecord-capture` | Work finished. Decide what the store should say — usually nothing. |
 | `openrecord-audit` | A record is suspected stale, or you're about to lean on one heavily. Check it against the code, claim by claim. |
 | `openrecord-reconcile` | A record was just written or edited. Check it against the other records it could contradict. |
-| `openrecord-bootstrap` | An empty store. Fill it by asking the user, never by inferring. |
+| `openrecord-onboard` | An empty store. Fill it by asking the user, never by inferring. |
 | `openrecord-mine` | Code but no records. Reconstruct candidates; never write. |
 | `openrecord-setup-search` | Once per project, before `search` is used at all. Registers the stores so records can be found by meaning. |
 

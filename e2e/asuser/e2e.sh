@@ -276,7 +276,7 @@ step "8. Skills y emit"
 # que setup-search viene siempre.
 openrecord skills --emit .claude/skills/ >/dev/null
 check "$(ls .claude/skills | sort | tr '\n' ' ')" \
-      "openrecord-audit openrecord-bootstrap openrecord-capture openrecord-consult openrecord-mine openrecord-reconcile openrecord-setup-search " "las siete skills, todas con prefijo"
+      "openrecord-audit openrecord-capture openrecord-consult openrecord-mine openrecord-onboard openrecord-reconcile openrecord-setup-search " "las siete skills, todas con prefijo"
 check "$(rc openrecord skills --emit .claude/skills/ --with-qmd)" "1" "--with-qmd ya no existe — falla como flag desconocida"
 fp() { find .claude/skills -type f -exec sha256sum {} + | sort | sha256sum; }
 b="$(fp)"; openrecord skills --emit .claude/skills/ --dry-run >/dev/null

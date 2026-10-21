@@ -1,12 +1,16 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	openrecord "github.com/franwerner/open-record"
+	"github.com/franwerner/open-record/internal/emit"
 	"github.com/franwerner/open-record/internal/finding"
 )
 
@@ -114,6 +118,68 @@ func TestSkillsReportsASkillFromAnOldManifestAsRemoved(t *testing.T) {
 	report := decode[skillsReport](t, mustRun(t, repo, "skills", "--emit", out, "--dry-run"))
 	if report.Counts["removed"] == 0 && report.Counts["kept"] == 0 {
 		t.Errorf("a skill named only in an old with_qmd manifest was neither removed nor kept: %+v", report)
+	}
+}
+
+// The onboard skill was renamed from openrecord-bootstrap. A directory
+// still carrying a manifest entry from a build that shipped the old name
+// must report openrecord-bootstrap removed and openrecord-onboard created —
+// the exact mechanism `docs/README.md` and the skills themselves rely on to
+// say an existing installation picks up the rename cleanly — and the
+// manifest on disk must reflect the swap afterwards, not just the report.
+func TestSkillsReportsTheRenamedOnboardSkillAsRemovedAndCreated(t *testing.T) {
+	repo := project(t)
+	out := filepath.Join(t.TempDir(), "skills")
+
+	oldContents := []byte("old openrecord-bootstrap content, before the rename")
+	sum := sha256.Sum256(oldContents)
+	oldHash := hex.EncodeToString(sum[:])
+
+	if err := os.MkdirAll(filepath.Join(out, "openrecord-bootstrap"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(out, "openrecord-bootstrap", "SKILL.md"), oldContents, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	manifest := fmt.Sprintf(`{"version":1,"emitter":"test","entries":[{"path":"openrecord-bootstrap/SKILL.md","hash":%q}]}`, oldHash)
+	if err := os.WriteFile(filepath.Join(out, emit.ManifestName), []byte(manifest), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report := decode[skillsReport](t, mustRun(t, repo, "skills", "--emit", out))
+
+	var sawRemoved, sawCreated bool
+	for _, change := range report.Changes {
+		if change.Path == "openrecord-bootstrap/SKILL.md" && change.Action == emit.Removed {
+			sawRemoved = true
+		}
+		if change.Path == "openrecord-onboard/SKILL.md" && change.Action == emit.Created {
+			sawCreated = true
+		}
+	}
+	if !sawRemoved {
+		t.Errorf("openrecord-bootstrap/SKILL.md was not reported removed: %+v", report.Changes)
+	}
+	if !sawCreated {
+		t.Errorf("openrecord-onboard/SKILL.md was not reported created: %+v", report.Changes)
+	}
+
+	if _, err := os.Stat(filepath.Join(out, "openrecord-bootstrap")); !os.IsNotExist(err) {
+		t.Errorf("openrecord-bootstrap directory still exists on disk, want removed")
+	}
+	if _, err := os.Stat(filepath.Join(out, "openrecord-onboard", "SKILL.md")); err != nil {
+		t.Errorf("openrecord-onboard/SKILL.md was not written: %v", err)
+	}
+
+	raw, err := os.ReadFile(filepath.Join(out, emit.ManifestName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "openrecord-bootstrap") {
+		t.Errorf("manifest still names openrecord-bootstrap after the emit: %s", raw)
+	}
+	if !strings.Contains(string(raw), "openrecord-onboard/SKILL.md") {
+		t.Errorf("manifest does not name openrecord-onboard/SKILL.md after the emit: %s", raw)
 	}
 }
 
