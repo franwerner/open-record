@@ -178,6 +178,25 @@ navigate.
 It touches `decisions/` only. Specs are organised by type, not by component — a spec names its
 components in its frontmatter and lives elsewhere.
 
+### `component edit`
+
+```
+openrecord component edit api --description "The HTTP surface. Descend here if you touch endpoints, the payment webhook, presigned-URL issuance, or the Postgres account model."
+```
+
+Replaces `--title` and/or `--description` — whichever is given; the id and the paths it owns are
+untouched. Title and description live in `decisions/<id>/INDEX.md`, the same file `component add`
+creates, so this is how that prose is refined once a surface already exists — never a hand-edit of
+`INDEX.md`, which this command exists to replace.
+
+There is no `--path` here. Changing which directories a component owns is a different, riskier
+operation — it can orphan files the way `component remove` already refuses to — and belongs to a
+separate decision, not a wording fix.
+
+Like `component add`/`component remove`, it refuses before touching anything when `components.json`
+cannot be trusted — `json-hash-missing` or `json-hash-mismatch`, file untouched — and fails with a plain
+usage error on an id that was never declared.
+
 ### `component remove`
 
 Removes the declaration and its folder, but **only when nothing references the component**. Two things

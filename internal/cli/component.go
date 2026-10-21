@@ -80,6 +80,74 @@ func runComponentAdd(env Env, args []string) error {
 	})
 }
 
+type componentEditOptions struct {
+	title, description *string
+}
+
+func componentEditFlags(flags *flag.FlagSet) *componentEditOptions {
+	return &componentEditOptions{
+		title:       flags.String("title", "", "replace what the surface is called"),
+		description: flags.String("description", "", "replace when a reader should descend here"),
+	}
+}
+
+func runComponentEdit(env Env, args []string) error {
+	subject, rest := splitPositional(args)
+	flags := flagSet("component edit")
+	options := componentEditFlags(flags)
+	if err := parseFlags(flags, rest); err != nil {
+		return err
+	}
+	id, err := oneArgument("component edit", subject, "an id")
+	if err != nil {
+		return err
+	}
+	title, description := options.title, options.description
+
+	set, err := store.LoadComponents(env.Repo)
+	if err != nil {
+		return err
+	}
+	// Same principle as add and remove: a components.json that cannot be
+	// trusted is never written over, so a hand-edit is never laundered into a
+	// hash that matches again.
+	if findings := store.VerifyComponents(env.Repo, set); len(findings) > 0 {
+		return findings[0]
+	}
+	if !set.Has(id) {
+		return Errorf(finding.CodeUsage, "%q is not declared", id)
+	}
+
+	// Title and description live in decisions/<id>/INDEX.md, not in
+	// components.json — the same one-home-per-fact split `component add`
+	// writes under. There is no --path here: moving what directories a
+	// component owns is a different, riskier operation (it can orphan files
+	// `component remove` already refuses to orphan) and is not this command's
+	// job.
+	coordinate := store.Coordinate{Kind: store.Decisions, Segments: []string{id}}
+	indexPath := filepath.Join(coordinate.Dir(env.Repo), store.IndexFile)
+	current, findings := store.ReadIndex(indexPath)
+	if len(findings) > 0 {
+		return findings[0]
+	}
+
+	if strings.TrimSpace(*title) != "" {
+		current.Title = *title
+	}
+	if strings.TrimSpace(*description) != "" {
+		current.Description = *description
+	}
+
+	if err := os.WriteFile(indexPath, store.RenderIndex(current), 0o644); err != nil {
+		return Errorf(finding.CodeUsage, "write %s: %v", path.Join(coordinate.String(), store.IndexFile), err)
+	}
+	return env.WriteJSON(map[string]any{
+		"edited":      id,
+		"title":       current.Title,
+		"description": current.Description,
+	})
+}
+
 func runComponentRemove(env Env, args []string) error {
 	subject, rest := splitPositional(args)
 	flags := flagSet("component remove")

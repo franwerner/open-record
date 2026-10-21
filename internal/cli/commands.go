@@ -23,6 +23,13 @@ var commands = []*Command{
 				Run:     runComponentAdd,
 			},
 			{
+				Name:    "edit",
+				Summary: "Replace a component's title and/or description.",
+				Usage:   "openrecord component edit ID [--title TITLE] [--description TEXT]",
+				Flags:   describes(componentEditFlags),
+				Run:     runComponentEdit,
+			},
+			{
 				Name:    "remove",
 				Summary: "Remove a surface, when nothing references it.",
 				Usage:   "openrecord component remove ID",
