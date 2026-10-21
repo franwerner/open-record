@@ -34,6 +34,7 @@ without `OPENROUTER_API_KEY` set — there is no degraded mode and no partial re
 | `check` | Declare and remove checks — task 09's registry of what verifies a decision or a spec. |
 | `level` | Create a concern or subgroup folder with its index. |
 | `record` | Write and edit records. |
+| `run` | Task 15's core: a run's own artifacts — scope, plan, tasks and gaps — never records. |
 | `validate` | Check a coordinate is well-formed, recursively. |
 | `impact` | Report a record's full neighbourhood, or — with `--files` — which decisions and specs govern a set of code files. |
 | `grep` | Literal search, scoped to a store. |
@@ -936,6 +937,271 @@ below (`compliance-unreadable` through `compliance-orphan`). A compliance file w
 exists in the store (renamed or removed) is `compliance-orphan`, a **warning**: it governs nothing any
 more, but deleting it is left to whoever maintains the store, never done automatically — the same
 principle `component remove`/`sandbox remove` already follow for what still references something.
+
+---
+
+## `run` {#run}
+
+Task 15's core: a run's own artifacts. **A run is not a session** — it is a unit of work (one scope, one
+plan, one set of tasks, eventually one PR). It can span several sessions, which is the whole point of
+writing it down: a long implementation flow (issue 18) can be cut short and picked up later without
+redoing what is already done, and one session may start several runs. A run is never a record: it does
+not describe the system, it is the work of one particular pass over it.
+
+**What is built now, and what waits on issue 18** (its only consumer today):
+
+| Now | With issue 18 |
+| --- | --- |
+| `.openrecord/runs/<id>/` with `run.json`, `plan.json`, `tasks.json`, `gaps/` | `reviews/`, `findings/`, `report.md`, a per-task retry limit, retention |
+| `run start --scope` computing a plan over the current checkout | A worktree of its own (issue 20) |
+| `run task done`: runs checks, refuses if they fail, writes nothing to `compliance` yet | `run task done` writing a `compliance log` event |
+
+### Where it lives
+
+```
+.openrecord/runs/                 ← ignored by git, its own .gitignore
+  20261006T143012Z-a3f9c1/        ← one run
+    run.json                      ← id, scope, the commit the store was at, state
+    plan.json                     ← the plan `run start` computed, once
+    tasks.json                    ← tasks' own DEFINITION only — id, title, records, depends_on —
+                                     plus a history of earlier plans; never a task's state or files
+    tasks/<task-id>.json          ← that task's own EXECUTION: state, when it started and its
+                                     snapshot, and — once done — what it found; never written from a
+                                     caller's own input, only by `run task start`/`run task done`/a gap
+    gaps/<gap-id>.json            ← one file per gap
+```
+
+**A task's definition and its execution are two separate files, deliberately.** `run tasks set`
+validates and saves a replan by touching `tasks.json` alone; `run task start`/`run task done` and a gap
+touch only that one task's own file under `tasks/`, never `tasks.json` — so the two things a replan
+needs to decide (what a task covers, and what is already done) never contend for the same write.
+
+Every file carries the same integrity `hash` every other JSON file under `.openrecord/` carries (see
+[decision-record.md](decision-record.md#hash)). Any `run` command that reads a file whose hash no
+longer matches refuses with a finding rather than working from it — the file itself is left untouched.
+**`validate` does not walk `runs/`**: these are never records, and the review of these files lives in
+the commands below, not in `validate`.
+
+**No worktree yet.** A run works on the current checkout; an isolated worktree per run is a separate
+mechanism, deferred. **No retention yet.** Nothing under `runs/` is ever deleted automatically — decide
+later, once there is more than one run's worth of experience to decide from.
+
+### `run start`
+
+```
+openrecord run start --scope decisions/api/structure specs/flow/checkout.md
+```
+
+`--scope` is **required** for now — one or more store paths, space-separated, repeated, or
+comma-separated, exactly like `--files` (impact.go's `extractFiles`). Each one is either a group
+(every record under it) or a single record; the plan is the union, deduplicated. **Any path that does
+not exist fails the whole call, before anything is written.** Scope resolution is its own step
+(`resolveScope`) precisely so a later version can compute a scope on its own when `--scope` is omitted
+(a roadmap command, issue 21) without touching anything else here.
+
+Validated first, over the whole store, exactly like `impact`/`compliance status`: a plan built on top
+of a store with an error anywhere is not trustworthy.
+
+Writes, in order, only once everything above has succeeded:
+
+- **`run.json`**: `id` (a timestamp plus a random suffix, the same shape `search`'s own ids use),
+  `scope` exactly as requested, `commit` (the repository's `HEAD` at the moment the run started, or
+  `""` when the repository is not a git repository at all — reported here as the decision, since the
+  task left it to be made), `state` (`open` — closing a run waits on a later task), and `created`
+  (`YYYY-MM-DD`).
+- **`plan.json`**: `records` — the union of every record under the scope, each carrying `path`,
+  `status`, `description`, `body_hash`, `compliance` (the exact state `compliance status` computes —
+  `unknown`/`up_to_date`/`outdated`/`blocked`), `possibly_stale`, `verified_by` (the same check objects
+  `impact` reports) and `scenarios` (the same shape `impact` reports, omitted when the record has no
+  anchors). `outside_scope` — records **outside** the scope that an in-scope record depends on (a
+  decision serving an in-scope spec, and the full `depends-on` chain upward of in-scope decisions and
+  of those serving decisions), kept only when not known to be up to date right now: `compliance` is
+  anything other than `up_to_date`, **or** it is `up_to_date` but `possibly_stale` (a decision this
+  brief left open, made here: a `possibly_stale` dependency is exactly the kind of thing worth a second
+  look before building on it from outside its own scope). Each entry carries `path`, `status`,
+  `description`, `compliance` and `needed_by` (the in-scope paths that reach it). **Informative only —
+  `run start` never refuses over it.**
+
+`compliance`/`possibly_stale` are computed by the exact same function `compliance status` uses
+(`complianceSnapshot`, internal/cli/compliance.go) — never a second implementation that could answer
+differently for the same record.
+
+Output: the written `run.json` and `plan.json`, as JSON.
+
+### `run status`
+
+```
+openrecord run status 20261006T143012Z-a3f9c1
+```
+
+Reports `run.json`, each task's definition merged with its current execution (`tasks.items`: `id`,
+`title`, `records`, `state`, and — once `done` — `files`), a task-count summary (`tasks.by_state`), and
+`drift` against the plan — **it never updates `plan.json`**, because only a person decides whether to
+keep going against a plan that has moved, or start a new run:
+
+- `changed` — in-scope records whose current body-hash no longer matches `plan.json`'s own snapshot.
+- `added` — records now under the scope paths that are not in the plan.
+- `removed` — plan records that no longer exist.
+
+### `run list`
+
+```
+openrecord run list
+```
+
+Every run under `.openrecord/runs/`, with its `id`, `state`, `created` and `scope` — cheap: one listing
+of `runs/` plus one read per run, no store validation and no plan or task files opened. It exists so a
+caller (a skill, a person) can find an open run without knowing `.openrecord/runs/` is where they live.
+
+### `run tasks set` — planning and replanning
+
+```
+openrecord run tasks set 20261006T143012Z-a3f9c1 --file tasks.json
+openrecord run tasks set 20261006T143012Z-a3f9c1          # reads the list from stdin
+```
+
+Reads the **whole** task list as a JSON array, from `--file` or stdin: `[{"id", "title", "records",
+"depends_on"}, ...]` — a task's **definition** only, which is all `tasks.json` ever holds. **No `state`
+field is accepted** — proposing a plan and marking it done are two different acts, and this command is
+only ever the first. One rejected with everything else is reported as `task-state-forbidden`.
+
+The binary — never the caller — enforces, refusing (nothing written) on the first violation, reading
+each existing task's own **execution** file (`tasks/<task-id>.json`) to decide which of the rules below
+apply, never a field inside `tasks.json` itself:
+
+- **Coverage**: every plan record whose `compliance` is not `up_to_date` (or is `up_to_date` but
+  `possibly_stale`) is covered by some task's `records`.
+- **Containment**: every task's `records` are records that are actually in this run's plan.
+- **Immutability of `done`**: a task whose execution already says `done` must be present in the new
+  list, identical in `id`, `title`, `records` and `depends_on` — it can be neither removed nor
+  modified. Every other existing task's definition may simply be replaced by whatever the new list
+  gives it — only `done` is protected. Its execution file is never touched by this command either way.
+- **`depends_on`** names tasks that exist in the same list, with no self-dependency and no cycle.
+- **Unique, valid ids.**
+
+A task's execution is untouched by `set` in every case — a new task simply has none yet (implicitly
+`pending`), and an existing `in_progress`/`blocked` one keeps exactly the execution it already had.
+
+**Each successful `set` keeps the previous version**, appended to `tasks.json`'s own `history` array
+with the date it was superseded — a replan never silently loses what came before it.
+
+### `run task start`
+
+```
+openrecord run task start 20261006T143012Z-a3f9c1 task-02
+```
+
+Moves a `pending` task (a task with no execution file yet reads as `pending` — nothing has to exist on
+disk for a task that was never started) to `in_progress`. Refuses when any of its `depends_on` tasks is
+not `done`, or when another task in the same run is already `in_progress` — **tasks inside one run run
+in series**: they share the current checkout, and two at once would step on each other.
+
+It writes a brand new `tasks/<task-id>.json` — state `in_progress`, and a **snapshot**: every file git
+considers changed right now — tracked modified/staged, or untracked, excluding `.openrecord/` (the same
+signal `compliance status`'s own `possibly_stale` reads) — each with a SHA-256 content fingerprint,
+under `started.snapshot`. Hashed like every other run artifact, and the one thing that lets `run task
+done` (below) infer `{files}` on its own, rather than asking for it. Starting a task again after a gap
+put it back to `pending` discards whatever execution it had before — the new snapshot is the only one
+that matters from here on.
+
+### `run task done`
+
+```
+openrecord run task done 20261006T143012Z-a3f9c1 task-02
+```
+
+**Takes no `--files` flag at all** — a stray one is a usage error, like any other unexpected argument.
+The files a task touched are never given by the caller; the binary classifies them itself, against the
+snapshot `run task start` recorded and git's own history, into three lists:
+
+| List | Rule |
+| --- | --- |
+| `created` | Exists now, was **not** in the snapshot, and is **not tracked at `HEAD`** either — genuinely new. |
+| `modified` | Exists now, and its content differs from the snapshot's own fingerprint when the snapshot had one for it; or, when it did not, differs from what is committed at `HEAD`. |
+| `deleted` | No longer exists, but was either in the snapshot or is tracked at `HEAD` — something worth reporting lost. |
+
+A file in neither the snapshot nor currently flagged by git as changed is never considered at all —
+nothing suggests it needs a second look. **`{files}` is completed with `modified` ∪ `created` only —
+`deleted` is reported but never passed to a check**, since there is nothing left to point one at.
+
+The task must be `in_progress`. Runs, with the **exact same engine `check run` uses** (`executeChecks`,
+shared rather than reimplemented — internal/cli/run.go), the union of: every check whose command takes
+`{files}`, completed with `modified ∪ created`, and every check whose `enforces` covers any of the
+task's own `records` — the latter run **even when nothing changed at all**. A check that takes
+`{files}` when nothing changed has nothing to run and nothing to lint: it is **skipped**, reported with
+`"result": "skipped"` and a `reason`, rather than refused or run against an empty substitution (which
+would report a vacuous pass).
+
+All non-skipped, selected checks passing writes `tasks/<task-id>.json`'s own `done` — `date`, the three
+file lists, and the check results — and moves `state` to `done`; both are visible afterward in `run
+status`. Any failure writes nothing at all: the task stays `in_progress`, its snapshot untouched, so a
+retry diffs against the exact same starting point, and exits non-zero with the results that did run. A
+task whose records have no checks, with nothing changed, has nothing to run and passes.
+
+**This does not write to `.openrecord/compliance/` yet** — see the table at the top of this section for
+why, and what changes with issue 18.
+
+### Gaps
+
+A gap is a question only a person can answer, with the evidence that raised it.
+
+```
+openrecord run gap add 20261006T143012Z-a3f9c1 \
+  --id size-vs-format --question "Which error wins when a file is both too large and the wrong format?" \
+  --kind missing --evidence specs/flow/upload-file.md#reject-oversized-upload \
+  --evidence src/api/handlers/upload.go:41 --blocks task-03
+openrecord run gaps
+openrecord run gap resolve 20261006T143012Z-a3f9c1 size-vs-format --record decisions/api/uploads/error-precedence.md
+```
+
+**`run gap add`**: `--id` (required, validated the same way a run or task id is — no path separators,
+no `..`) names the file (`gaps/<id>.json`); refuses if one with that id already exists.
+`--question` is required. `--kind` is one of the same three values `compliance log --blocked-by`
+already declares — `missing` (nobody has written this decision down: `--record` must be **absent**),
+`pending` (blocked on a decision that exists but is not accepted yet: `--record` required and must
+exist), `contradicts` (an existing record says something incompatible: `--record` required and must
+exist). `--evidence` is required, one or more refs, each either a record path, a `record#anchor` (the
+anchor must exist on that record), or a `file:line` (the file must exist); any ref that resolves to
+none of the three refuses the call. `--blocks` names existing, not-yet-`done` tasks in this run; each
+one's own **execution** moves to `blocked` (`tasks.json`, the definition, is never touched by this
+command).
+
+**`run gaps`** lists every **open** gap across every run, each carrying which run it belongs to — the
+one command a caller (the definition skill, issue 17) needs: it never has to know `runs/<id>/gaps/`
+exists at all.
+
+**`run gap resolve`** requires `--record`, naming a record that exists and is `accepted`. The gap moves
+to `resolved`, recording that record; every task it blocked has its own execution moved back to
+`pending`, unless another still-open gap also blocks it.
+
+### Validations
+
+| Code | Severity | What it catches |
+| --- | --- | --- |
+| `run-not-found` | — | A run id that is malformed or names no run. |
+| `run-unreadable` | error | A run artifact exists but cannot be parsed, or declares an unknown format. |
+| `scope-not-found` | — | A `--scope` value that does not resolve to a record or a group in the store. |
+| `task-state-forbidden` | error | `run tasks set`'s input carries a `state` field, or `tasks.json` itself holds one outside `pending`/`in_progress`/`done`/`blocked`. |
+| `task-coverage-missing` | error | A plan record needing work is covered by no task. |
+| `task-record-not-in-plan` | error | A task names a record that is not in this run's plan. |
+| `task-done-immutable` | error | A `done` task was removed or its `id`/`title`/`records`/`depends_on` changed. |
+| `task-depends-on-not-found` | error | `depends_on` names a task that is not in the list. |
+| `task-depends-on-cycle` | error | A task depends on itself, or `depends_on` edges form a cycle. |
+| `task-duplicate` | error | A task id declared more than once in one `run tasks set` call. |
+| `task-not-found` | — | A task id that names no task in the run. |
+| `task-not-pending` | — | `run task start` on a task that is not `pending`. |
+| `task-dependency-not-done` | — | `run task start` while a `depends_on` task is not `done`. |
+| `task-in-progress-conflict` | — | `run task start` while another task in the run is already `in_progress`. |
+| `task-not-in-progress` | — | `run task done` on a task that is not `in_progress`. |
+| `task-snapshot-missing` | error | `run task done` found no snapshot for the task — `run task start` was never run for it, or its snapshot was removed by hand. |
+| `gap-not-found` | — | A gap id that names no gap in the run. |
+| `gap-kind-invalid` | error | `--kind` is not `missing`, `pending`, or `contradicts`. |
+| `gap-record-missing` | error | `--record` absent for `pending`/`contradicts`, or given for `missing`. |
+| `gap-record-not-found` | error | `--record` does not resolve to a record. |
+| `gap-record-not-accepted` | error | `run gap resolve --record` names a record that is not `accepted`. |
+| `gap-evidence-invalid` | error | An `--evidence` ref resolves to neither a record, a `record#anchor`, nor a `file:line`. |
+| `gap-blocks-not-found` | error | `--blocks` names a task that is not in the run, or is already `done`. |
+| `gap-duplicate` | error | `run gap add --id` names a gap that already exists in this run. |
 
 ---
 

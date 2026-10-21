@@ -145,6 +145,89 @@ var commands = []*Command{
 		},
 	},
 	{
+		Name:    "run",
+		Summary: "Task 15's core: a run's own artifacts — scope, plan, tasks and gaps — never records.",
+		Sub: []*Command{
+			{
+				Name:    "start",
+				Summary: "Compute a plan over a scope and open a run.",
+				Usage:   "openrecord run start --scope PATH...",
+				Flags:   describes(runStartFlags),
+				Run:     runRunStart,
+			},
+			{
+				Name:    "status",
+				Summary: "Report a run's own state, its tasks, and drift since its plan was computed.",
+				Usage:   "openrecord run status RUN-ID",
+				Run:     runRunStatus,
+			},
+			{
+				Name:    "list",
+				Summary: "List every run under .openrecord/runs/.",
+				Usage:   "openrecord run list",
+				Run:     runRunList,
+			},
+			{
+				Name:    "tasks",
+				Summary: "Plan and replan a run's tasks.",
+				Sub: []*Command{
+					{
+						Name:    "set",
+						Summary: "Validate and save a run's task list, read as JSON from stdin or --file.",
+						Usage:   "openrecord run tasks set RUN-ID [--file PATH]   (reads the task list from stdin otherwise)",
+						Flags:   describes(runTasksSetFlags),
+						Run:     runRunTasksSet,
+					},
+				},
+			},
+			{
+				Name:    "task",
+				Summary: "Move one task through its own lifecycle.",
+				Sub: []*Command{
+					{
+						Name:    "start",
+						Summary: "Move a pending task to in_progress.",
+						Usage:   "openrecord run task start RUN-ID TASK-ID",
+						Run:     runRunTaskStart,
+					},
+					{
+						Name:    "done",
+						Summary: "Run the task's checks against whatever it changed, and mark it done if they all pass.",
+						Usage:   "openrecord run task done RUN-ID TASK-ID",
+						Run:     runRunTaskDone,
+					},
+				},
+			},
+			{
+				Name:    "gaps",
+				Summary: "List every open gap, across every run.",
+				Usage:   "openrecord run gaps",
+				Run:     runRunGaps,
+			},
+			{
+				Name:    "gap",
+				Summary: "Register and resolve a run's own gaps.",
+				Sub: []*Command{
+					{
+						Name:    "add",
+						Summary: "Register a gap: a question only a person can answer.",
+						Usage: "openrecord run gap add RUN-ID --id ID --question TEXT --kind missing|pending|contradicts " +
+							"[--record PATH] --evidence REF... [--blocks TASK-ID...]",
+						Flags: describes(runGapAddFlags),
+						Run:   runRunGapAdd,
+					},
+					{
+						Name:    "resolve",
+						Summary: "Resolve a gap with an existing, accepted record.",
+						Usage:   "openrecord run gap resolve RUN-ID GAP-ID --record PATH",
+						Flags:   describes(runGapResolveFlags),
+						Run:     runRunGapResolve,
+					},
+				},
+			},
+		},
+	},
+	{
 		Name:    "level",
 		Summary: "Create a concern or subgroup with its index.",
 		Sub: []*Command{

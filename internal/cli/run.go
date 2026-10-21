@@ -679,6 +679,11 @@ type checkResult struct {
 	Result  string  `json:"result"`
 	Seconds float64 `json:"seconds"`
 	Needs   string  `json:"needs,omitempty"`
+	// Reason is set only on a "skipped" result — `run task done` (task
+	// 15) skipping a check whose command takes `{files}` when nothing
+	// changed, rather than running it against an empty substitution.
+	// `check run` itself never sets this.
+	Reason string `json:"reason,omitempty"`
 }
 
 // sandboxBringUpReport is one sandbox's own section of `check run`'s
@@ -797,16 +802,33 @@ func runCheckRun(env Env, args []string) error {
 		selected = filtered
 	}
 
-	// Grouped by needed sandbox rather than run in one flat pass: every
-	// check that needs the same sandbox shares one bring-up/tear-down
-	// cycle, run exactly once, even though `checks` in the final output is
-	// re-sorted by id afterwards to keep the reported order deterministic
-	// by id as decided. Checks needing no sandbox at all run first, in id
-	// order; each needed sandbox then comes up once, in sandbox-id order,
-	// runs every check that needs it (in id order), and always tears back
-	// down before the next one — see docs/cli.md#check for why this reads
-	// "by check id" rather than literally interleaving every check in one
-	// global id-ordered pass.
+	results, sandboxReports, allPassed, err := executeChecks(env.Repo, selected, filesFromFlag)
+	if err != nil {
+		return err
+	}
+
+	output := checkRunOutput{Files: fileOwners, Checks: results, Sandboxes: sandboxReports}
+	if err := env.WriteJSON(output); err != nil {
+		return err
+	}
+	if !allPassed {
+		return errExitWithReport
+	}
+	return nil
+}
+
+// executeChecks is `check run`'s own engine, factored out so `run task
+// done` (task 15) runs checks through the exact same lifecycle rather than
+// reimplementing it: grouped by needed sandbox rather than run in one flat
+// pass, so every check that needs the same sandbox shares one
+// bring-up/tear-down cycle, run exactly once, even though the returned
+// results are re-sorted by id afterwards to keep the reported order
+// deterministic. Checks needing no sandbox at all run first, in id order;
+// each needed sandbox then comes up once, in sandbox-id order, runs every
+// check that needs it (in id order), and always tears back down before the
+// next one — see docs/cli.md#check for why this reads "by check id" rather
+// than literally interleaving every check in one global id-ordered pass.
+func executeChecks(repo string, selected []store.Check, files []string) ([]checkResult, []sandboxBringUpReport, bool, error) {
 	var standalone []store.Check
 	needed := map[string][]store.Check{}
 	var sandboxIDs []string
@@ -824,9 +846,10 @@ func runCheckRun(env Env, args []string) error {
 
 	var sandboxes store.Sandboxes
 	if len(sandboxIDs) > 0 {
-		sandboxes, err = store.LoadSandboxes(env.Repo)
+		var err error
+		sandboxes, err = store.LoadSandboxes(repo)
 		if err != nil && !store.IsSandboxesUndeclared(err) {
-			return err
+			return nil, nil, false, err
 		}
 	}
 
@@ -835,7 +858,7 @@ func runCheckRun(env Env, args []string) error {
 
 	effectiveCommand := func(item store.Check) string {
 		if store.OnChange(item.Command) {
-			return substituteFiles(item.Command, filesFromFlag)
+			return substituteFiles(item.Command, files)
 		}
 		return item.Command
 	}
@@ -843,7 +866,7 @@ func runCheckRun(env Env, args []string) error {
 	runOne := func(item store.Check) {
 		command := effectiveCommand(item)
 		start := time.Now()
-		err := runShell(env.Repo, command)
+		err := runShell(repo, command)
 		elapsed := time.Since(start).Seconds()
 		result := "passed"
 		if err != nil {
@@ -885,7 +908,7 @@ func runCheckRun(env Env, args []string) error {
 		// (bring up, exercise, tear down, nothing else runs in between)
 		// but the wrong one here, where the checks themselves are what
 		// should run against it before it comes down.
-		steps, setupOK := sandboxBringUp(env.Repo, sandbox)
+		steps, setupOK := sandboxBringUp(repo, sandbox)
 		steps, upOK := sandboxWaitReady(steps, sandbox, setupOK)
 		if upOK {
 			for _, item := range checksHere {
@@ -896,19 +919,11 @@ func runCheckRun(env Env, args []string) error {
 				failWithoutRunning(item)
 			}
 		}
-		stopStep, _ := sandboxTearDown(env.Repo, sandbox)
+		stopStep, _ := sandboxTearDown(repo, sandbox)
 		steps = append(steps, stopStep)
 		sandboxReports = append(sandboxReports, sandboxBringUpReport{ID: sandboxID, Steps: steps})
 	}
 
 	sort.Slice(results, func(i, j int) bool { return results[i].ID < results[j].ID })
-
-	output := checkRunOutput{Files: fileOwners, Checks: results, Sandboxes: sandboxReports}
-	if err := env.WriteJSON(output); err != nil {
-		return err
-	}
-	if !allPassed {
-		return errExitWithReport
-	}
-	return nil
+	return results, sandboxReports, allPassed, nil
 }

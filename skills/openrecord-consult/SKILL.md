@@ -1,6 +1,6 @@
 ---
 name: openrecord-consult
-description: Find which durable records govern code before changing it, and run the project's checks against it before handing a change back. USE THIS SKILL before editing, adding, or refactoring any file in a project that has an `.openrecord/` store — before the first edit, not after — and again before calling a change finished, to verify it against the project's checks. Also when asked what governs a file, what was decided about some area, whether an approach is allowed, or why the code is the way it is. And before changing, retiring or re-evaluating a record itself — when asked what depends on a record, or what changing or replacing one would affect.
+description: Find which durable records govern code before changing it, and run the project's checks against it before handing a change back. USE THIS SKILL before editing, adding, or refactoring any file in a project that has an `.openrecord/` store — before the first edit, not after — and again before calling a change finished, to verify it against the project's checks. Also when asked what governs a file, what was decided about some area, whether an approach is allowed, or why the code is the way it is. And before changing, retiring or re-evaluating a record itself — when asked what depends on a record, or what changing or replacing one would affect. Also when asked to continue, resume, or pick up an openrecord run that is already in progress.
 ---
 
 # Consult the records before you write
@@ -19,6 +19,43 @@ project is missing records it never had, and do not offer to create a store beca
 absent.
 
 An empty store is a project that has not adopted this. That is a legitimate state, not a gap.
+
+## If an openrecord run is in progress
+
+A run (task 15) is a unit of work — one scope, one plan, one set of tasks — that can span several
+sessions. Before assuming there is nothing to pick up, find out:
+
+```
+openrecord run list
+```
+
+Cheap, and the one way to find an open run without knowing `.openrecord/runs/` exists. Then:
+
+```
+openrecord run status <run-id>
+```
+
+Reports the run's own state, a count of its tasks by state, and `drift` against the plan it started
+with. Pick up the first task that is `pending` with every dependency already `done`, or resume one
+already `in_progress`:
+
+```
+openrecord run task start <run-id> <task-id>
+openrecord run task done <run-id> <task-id>
+```
+
+**`run task done` takes no `--files` flag** — it infers what you touched itself, from a snapshot taken
+at `run task start`, by diffing the working tree against it. Edit the files the task needs between
+those two calls, then call `done` with nothing else: it runs every check that takes `{files}` against
+what actually changed, plus every check that already verifies the task's records (even with nothing
+changed at all — those simply have nothing to run), and only moves the task to `done` once everything
+that did run passes; a failure leaves it `in_progress` with the results that did run. If it fails, the
+fix belongs in the code, exactly as step 5 below says for `check run`.
+
+**Never hand-edit anything under `.openrecord/runs/`.** Every file there carries the same integrity
+hash a record does, and a command that reads a tampered one refuses rather than trusting it. Move a
+task through `run task start`/`run task done`; replan with `run tasks set`; register a question only a
+person can answer with `run gap add`, never by writing the JSON yourself.
 
 ## Before changing a record itself
 

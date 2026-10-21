@@ -168,19 +168,11 @@ func runComplianceStatus(env Env, args []string) error {
 			continue
 		}
 
-		var components []string
-		if coordinate.Kind == store.Decisions && coordinate.Depth() > 0 {
-			components = []string{coordinate.Segments[0]}
-		} else {
-			components = record.Components
-		}
+		components := recordOwnerComponents(coordinate, record)
 
-		compliance, loadErr := store.LoadCompliance(env.Repo, recordPath)
-		state := store.StateUnknown
-		if loadErr == nil {
-			state = store.ComplianceState(compliance.Events, record.BodyHash)
-		} else if !store.IsComplianceUndeclared(loadErr) {
-			return loadErr
+		state, compliance, stale, err := complianceSnapshot(env.Repo, declared, recordPath, record.BodyHash, components, gitRepo, uncommitted, diffCache)
+		if err != nil {
+			return err
 		}
 
 		switch state {
@@ -195,14 +187,8 @@ func runComplianceStatus(env Env, args []string) error {
 			upToDate++
 		}
 
-		if state != store.StateUnknown && gitRepo {
-			stale, err := possiblyStale(env.Repo, declared, recordPath, components, uncommitted, diffCache)
-			if err != nil {
-				return err
-			}
-			if stale {
-				possiblyStalePaths = append(possiblyStalePaths, recordPath)
-			}
+		if stale {
+			possiblyStalePaths = append(possiblyStalePaths, recordPath)
 		}
 	}
 
@@ -475,6 +461,44 @@ func nonEmptyGitLines(output string, skip int) []string {
 		files = append(files, trimmed)
 	}
 	return files
+}
+
+// recordOwnerComponents returns the component(s) possibly_stale compares
+// a changed file's owner against: a decision's component is the folder it
+// is filed under (closed by containment, same as everywhere else); a
+// spec's are the ones its frontmatter names. Shared by `compliance
+// status` and `run start`'s plan.json (task 15), so both read a record's
+// own component the same way.
+func recordOwnerComponents(coordinate store.Coordinate, record store.Record) []string {
+	if coordinate.Kind == store.Decisions && coordinate.Depth() > 0 {
+		return []string{coordinate.Segments[0]}
+	}
+	return record.Components
+}
+
+// complianceSnapshot computes one record's compliance state and its
+// possibly_stale flag — the exact pair `compliance status` reports for
+// every record, factored out so a caller building a different report
+// (`run start`'s plan.json, task 15) computes the identical snapshot
+// rather than re-deriving it. gitRepo, uncommitted and diffCache are
+// computed once by the caller and shared across every record, the same
+// way runComplianceStatus already shares them across its own loop.
+func complianceSnapshot(repo string, declared store.Components, recordPath, bodyHash string, components []string,
+	gitRepo bool, uncommitted []string, diffCache map[string][]string) (state string, compliance store.Compliance, stale bool, err error) {
+	compliance, loadErr := store.LoadCompliance(repo, recordPath)
+	state = store.StateUnknown
+	if loadErr == nil {
+		state = store.ComplianceState(compliance.Events, bodyHash)
+	} else if !store.IsComplianceUndeclared(loadErr) {
+		return "", store.Compliance{}, false, loadErr
+	}
+	if state != store.StateUnknown && gitRepo {
+		stale, err = possiblyStale(repo, declared, recordPath, components, uncommitted, diffCache)
+		if err != nil {
+			return "", store.Compliance{}, false, err
+		}
+	}
+	return state, compliance, stale, nil
 }
 
 // possiblyStale reports whether any file in uncommitted, or any file that

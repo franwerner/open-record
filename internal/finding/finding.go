@@ -127,6 +127,39 @@ const (
 	// from the store itself having something wrong, which is why cli.Run
 	// gives it the usage exit code rather than the generic failure one.
 	CodeRecordNotFound = "record-not-found"
+
+	// Task 15's execution registry (.openrecord/runs/): a run's own
+	// artifacts — run.json, plan.json, tasks.json, gaps/ — never records,
+	// so these are never raised by `validate`/check.Store; the commands in
+	// internal/cli/execution*.go report them directly. See
+	// docs/cli.md#run.
+	CodeRunNotFound            = "run-not-found"
+	CodeRunUnreadable          = "run-unreadable"
+	CodeScopeNotFound          = "scope-not-found"
+	CodeTaskStateForbidden     = "task-state-forbidden"
+	CodeTaskCoverageMissing    = "task-coverage-missing"
+	CodeTaskRecordNotInPlan    = "task-record-not-in-plan"
+	CodeTaskDoneImmutable      = "task-done-immutable"
+	CodeTaskDependsOnNotFound  = "task-depends-on-not-found"
+	CodeTaskDependsOnCycle     = "task-depends-on-cycle"
+	CodeTaskDuplicate          = "task-duplicate"
+	CodeTaskNotFound           = "task-not-found"
+	CodeTaskNotPending         = "task-not-pending"
+	CodeTaskDependencyNotDone  = "task-dependency-not-done"
+	CodeTaskInProgressConflict = "task-in-progress-conflict"
+	CodeTaskNotInProgress      = "task-not-in-progress"
+	CodeGapNotFound            = "gap-not-found"
+	CodeGapKindInvalid         = "gap-kind-invalid"
+	CodeGapRecordMissing       = "gap-record-missing"
+	CodeGapRecordNotFound      = "gap-record-not-found"
+	CodeGapRecordNotAccepted   = "gap-record-not-accepted"
+	CodeGapEvidenceInvalid     = "gap-evidence-invalid"
+	CodeGapBlocksNotFound      = "gap-blocks-not-found"
+	CodeGapDuplicate           = "gap-duplicate"
+	// CodeTaskSnapshotMissing means `run task done` found no snapshot for
+	// the task — `run task start` was never run for it, or its snapshot
+	// was removed by hand.
+	CodeTaskSnapshotMissing = "task-snapshot-missing"
 )
 
 // Finding is one thing wrong with one file.
