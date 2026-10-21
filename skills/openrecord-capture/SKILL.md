@@ -123,6 +123,34 @@ If you do not have the reasoning — and reading it off the code you just wrote 
 A rationale you composed to fill the section is worse than no record at all, because it reads ratified
 and will be trusted. This is the single most damaging thing this skill can do wrong.
 
+## What spec this decision serves
+
+Before writing a decision, resolve this yourself — nobody is there to ask, and you just did the work,
+so the answer is yours to give:
+
+```
+openrecord impact --files <the files this work touched>
+```
+
+Under `specs`, this returns every spec that governs the component(s) those files belong to. Three
+outcomes, and only one of them writes `--serves`:
+
+- **The work was done to fulfil one of them** — the decision exists because that spec had to hold.
+  Write it with `--serves <that spec>`.
+- **A spec governs the files, but this decision is not because of it** — it is a separate choice made
+  along the way, not the reason the spec holds. Do not link it. Sharing a file with a spec is not a
+  reason.
+- **None of them motivated this decision** — say so in `## Context`: that no spec motivates it, that
+  it is an engineering choice, and why.
+
+If the same capture writes both a new spec and a decision that serves it, write the spec first — a
+decision cannot name a spec that is not yet on the books.
+
+This is the same discipline as above, aimed at one flag: **a false `--serves` is worse than no
+`--serves` at all.** It tells a future reader "this decision exists because the product has to behave
+this way," and whoever later changes that spec will think this decision needs re-evaluating when it
+never actually depended on it.
+
 ## Create, edit, or nothing
 
 For each thing that survived the questions above, resolve one of three — and check the store before
@@ -204,10 +232,10 @@ openrecord record edit specs/rule/usage-limits.md \
   --body-file ./new-rule.md
 ```
 
-A decision can also carry **`--serves`** (the spec, functional or quality, it exists because of) and
-**`--depends-on`** (another decision that has to stay `accepted` for this one to still make sense — the
-test: if that other decision changed, would this one need re-evaluating?). Both are optional, both take
-a whole record path, repeatable, and both are refused on a spec:
+A decision can also carry **`--serves`** — the spec you resolved above, if any, named by its whole
+path — and **`--depends-on`** (another decision that has to stay `accepted` for this one to still make
+sense — the test: if that other decision changed, would this one need re-evaluating?). Both are
+optional, both take a whole record path, repeatable, and both are refused on a spec:
 
 ```
 openrecord record write decisions/api/data/pgx-driver.md \
@@ -280,12 +308,17 @@ You write without asking, so the report is what makes it visible. After writing:
 Written:
 - created   decisions/api/security/rate-limits/at-the-gateway.md
             Because: the placement was a choice with a rejected alternative (per-handler).
+            Serves: specs/flow/sign-up.md
 - edited    specs/rule/usage-limits.md § Rule
             Because: the observable limit went from 100 to 60 req/min.
 
 Not recorded:
 - the handler signature refactor — mechanical, settled nothing.
 ```
+
+**Every decision also reports which spec it serves** — or, when none motivated it, that it is an
+engineering choice with no spec behind it. That line is what lets a reader tell the two apart without
+opening the record.
 
 **"Not recorded" is the section that earns its place.** It shows a judgement was made rather than
 something being quietly skipped. Without it nobody can tell *decided it did not belong* from *never
