@@ -155,14 +155,44 @@ Quoting it is neither recovering the why from behaviour nor composing one. So:
 
 Where there is no such comment, the rule above is unchanged: say the reasoning is not recorded.
 
-## Relations are candidates too
+## What spec this decision serves
 
-If the code shows a decision only making sense because of a spec, or only making sense while another
-mined-or-existing decision holds, say so as part of the candidate: a proposed `serves` or `depends-on`
-link, with the same evidence trail as everything else here. These are structural claims, not a why, so
-they do not carry the same invention risk as a rationale — but they still go through confirmation like
-every other part of the candidate, and `depends-on` still only applies under its strict test: would the
-dependent need re-evaluating if the other one changed?
+Every decision candidate carries this as a line of its own — not only when the code happens to make it
+obvious, every time. Resolve it the way `openrecord-capture` resolves the same question for its own
+work ("What spec this decision serves"):
+
+```
+openrecord impact --files <the files the evidence came from>
+```
+
+Read the specs that returns under `specs`, and propose one of three outcomes, each with its own
+evidence trail — *this candidate, from this spec's declared behaviour, because of this*:
+
+- **The code shows the decision exists for that spec's behaviour** — propose `serves <that spec>`.
+- **A spec governs the same files, but the decision is not because of it** — propose nothing. Sharing a
+  file with a spec is not an origin.
+- **Nothing fits** — say so plainly: *"no spec found — does this exist because of some behaviour, or is
+  it an engineering choice?"* and leave the answer to the person.
+
+The one difference from `openrecord-capture`'s version of this question is the rule this whole skill
+already runs on: there the agent just did the work and resolves the origin itself; here the *why* comes
+from reading someone else's code after the fact, so the person confirms the link exactly as they confirm
+the rest of the candidate — **the agent proposes, it never decides.**
+
+Nothing is written before that confirmation — not the link, and not the decision it would attach to. If
+the same mining pass also proposes the spec a decision would serve, and the person confirms both, write
+the spec first: a decision cannot name a spec that is not yet on the books.
+
+A proposed `serves` is a structural claim, not a why, so it does not relax **the hard limit above**: it
+says *this decision's existence lines up with this spec's declared behaviour, here is where*, never
+*this is why it was chosen*. Judge it by the same test as any other mined decision — deliberate
+alignment, not two things that happen to live in the same file.
+
+### Other relations are candidates too
+
+`depends-on` on another mined-or-existing decision follows the same shape: propose it with its own
+evidence trail, under its own strict test — would the dependent need re-evaluating if the other one
+changed? Same confirmation, same rule against inventing one.
 
 Once a candidate with a link is confirmed and written, read `dependents` (or `served_by`, for a spec)
 in the write's reply, and mention what it surfaces — it may point at something else worth mining next.
