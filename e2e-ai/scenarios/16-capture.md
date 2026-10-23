@@ -263,3 +263,4 @@ PY
 ## Verdict log
 
 - 2026-10-21: PASS — checked: 4/4  judged: 2/2. Run 20261021T110938Z-16-capture. 2.1.296 (Claude Code) as orlab.
+- 2026-10-23: PASS — checked: 4/4  judged: 2/2. Run 20261023T173743Z-16-capture. 2.1.296 (Claude Code) as orlab. Regression after task 17 extended the skill.
