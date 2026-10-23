@@ -1,6 +1,6 @@
 ---
 name: openrecord-reconcile
-description: Check one record against the other records it could contradict, returning pairs with both sides in view — not a verdict on the record alone. USE THIS SKILL right after a record has been written or edited, before trusting the store to be consistent; when asked whether two records agree, whether a decision is already settled elsewhere, or whether a spec promises something a decision forbids; and when a record is suspected of duplicating or contradicting another.
+description: Check one record against the other records it could contradict, returning pairs with both sides in view — not a verdict on the record alone. USE THIS SKILL right after a record has been written or edited, before trusting the store to be consistent; before writing a record at all, to reconcile the draft before it lands; when asked whether two records agree, whether a decision is already settled elsewhere, or whether a spec promises something a decision forbids; and when a record is suspected of duplicating or contradicting another.
 ---
 
 # Reconcile a record with the rest of the store
@@ -36,6 +36,14 @@ The default anchor is the record that was just written or edited. Anything else,
 **The anchor is not what gets a verdict.** Every finding this skill reports is a **pair** — the anchor and one other record,
 both in view, both carrying their own status. A report that says "record X is fine" or "record X is
 broken" has already lost the thing that made the check meaningful.
+
+**The anchor does not have to be written yet.** A draft — a title, a description and a body nobody has
+called `record write` on — reconciles exactly the same way: `map`, `component owners`, and `search
+--context <the draft's title, description and body, pasted in whole>` all score a draft exactly as they
+score a written record, with nothing about them that depends on the file actually existing. The one
+step that does need something on disk is `impact <anchor>`, below, which needs a path the store already
+has: for a draft, run it instead on the records it will declare in `--serves`/`--depends-on` — those
+already exist, even though the draft itself does not yet.
 
 ## Building the neighbourhood
 

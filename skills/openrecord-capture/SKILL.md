@@ -1,15 +1,31 @@
 ---
 name: openrecord-capture
-description: Decide what a project's durable records should say after a piece of work, and write it. USE THIS SKILL when work is finished — a feature, a fix, a refactor, a config change — in a project that has an `.openrecord/` store. Most work settles nothing and writes nothing; this skill is as much about not writing as about writing.
+description: Decide what a project's durable records should say after a piece of work, and write it — or, when the user wants to define or record a specific decision, spec, actor, component, verification, or resolve an open gap, interview them for it first. USE THIS SKILL when work is finished — a feature, a fix, a refactor, a config change — in a project that has an `.openrecord/` store. Also USE THIS SKILL when the user wants to define, record, or write down a specific decision, spec, actor, component, or how something is verified, or wants to resolve a gap an `openrecord run` left open. Most work settles nothing and writes nothing; this skill is as much about not writing as about writing.
 ---
 
 # Capture what the work settled
 
-Work just finished. The question is what, if anything, the store should say now.
+This skill covers two separate moments, and they are told apart by one question: **does the *why*
+already exist, or does it need to be asked for?**
 
-**The answer is usually nothing.** Read that again before continuing, because your default is to
-produce something, and a store with a record per change is a store nobody reads. The value of these
-records comes from their scarcity: every one of them is something a reader has to hold in their head.
+1. **Work just finished.** A feature, a fix, a refactor, a config change. You did the work, so you
+   already have the reasoning — nobody is asked, nobody confirms, you resolve what the store should say
+   and write it. This is everything below through "When the work contradicts an accepted record."
+2. **Someone wants to define something specific** — an actor, a single decision, a new spec, a new
+   component, how something existing is verified, or a gap an `openrecord run` left open — before any
+   of it is settled by code at all. The *why* here is never yours to invent; it comes from the person,
+   or from whatever raised the gap. See "## Defining something specific" near the end.
+
+**In situation 1, the answer is usually nothing.** Read that again before continuing, because your
+default is to produce something, and a store with a record per change is a store nobody reads. The
+value of these records comes from their scarcity: every one of them is something a reader has to hold
+in their head. Situation 2 does not share this restraint the same way — there, someone explicitly asked
+for a specific record, so the question is not *whether* to write but *what*, confirmed with them before
+it happens.
+
+Everything else about this skill — the presence gate, never inventing a why, writing so a check could
+fail, the store's own vocabulary — holds in both. Only *who confirms* and *when something is written*
+differ, and the table in the next section says exactly how.
 
 ## The presence gate
 
@@ -17,25 +33,32 @@ No `.openrecord/` directory, or an empty one → this skill does not apply. Say 
 create a store because you noticed one is missing; offer, do not impose, and only if the user is
 heading somewhere it would help.
 
-## Nobody approves a record — here
+## Nobody approves a record — here, when the why is yours
 
 The store maintains itself. You do not present a list and wait for someone to approve it — you resolve
-what should be written and you write it.
+what should be written and you write it. **This holds for situation 1, finishing work, below.** It does
+not hold for situation 2 — defining something specific, also this skill — where the person confirms
+every record before it is written; see "## Defining something specific" for how.
 
-**Who confirms depends on where the reasoning came from.** One rule, three skills:
+**Who confirms depends on where the reasoning came from.** One rule, four rows — two of them this
+skill:
 
 | The *why* came from | Who confirms |
 | --- | --- |
-| Work you just did — **this skill** | Nobody. You resolve it and write it, then report. |
+| Work you just did — **this skill**, finishing work | Nobody. You resolve it and write it, then report. |
+| The person, or a gap an `openrecord run` left open — **this skill**, defining something specific | They do, record by record: title and a one-line description, then their yes writes it straight to `accepted`. See "## Defining something specific". |
 | The user, answering questions — `openrecord-onboard` | They do, record by record. |
 | The existing code — `openrecord-mine` | They do, over candidates. Nothing is materialised unconfirmed. |
 
-The line is authorship, not caution. Here you have the reasoning first-hand, because you did the work.
-In the other two it belongs to somebody else, and writing it down unratified puts words in their mouth
-that will later read as settled.
+The line is authorship, not caution. In the first row you have the reasoning first-hand, because you
+did the work. In every other row it belongs to somebody else — the person, or whoever wrote the pending
+record a gap points at — and writing it down unratified puts words in their mouth that will later read
+as settled.
 
-**The one thing that stops is a contradiction with an accepted record.** That is the only gate, and it
-exists because a record was ratified by a person and overriding it is not yours to do.
+**In situation 1, the one thing that stops is a contradiction with an accepted record.** That is the
+only gate, and it exists because a record was ratified by a person and overriding it is not yours to
+do. In situation 2 the person is already in the loop for every record, so a contradiction is surfaced to
+them before anything is even proposed — see "## Defining something specific".
 
 This is a deliberate trade. Asking for approval on every task would make the store expensive enough
 that it stops being kept, and a store nobody updates is worse than one with an imperfect record in it —
@@ -207,6 +230,21 @@ decision. Take the anchor from openrecord — the `anchors` a write or edit repo
 never from a guess at the slug; `openrecord validate` reports one that points nowhere. Annotate only the
 piece that verifies; production code never carries one.
 
+## Reconcile the draft before writing
+
+By this point you have a title, a description, and a body — nothing of it is on disk yet. Before the
+`record write` call itself, run `openrecord-reconcile` on the draft.
+
+Reconcile does not need a written record to work from: `map`, `component owners`, and `search --context
+<the draft's title, description and body, pasted in whole>` all score a draft exactly the way they
+score a written one. The one step that does need something on disk is `impact <anchor>` — a draft has
+no anchor yet, so run `impact` instead on the records it will declare in `--serves` or `--depends-on`
+(the spec you resolved above, the decision this one depends on), which already exist.
+
+A conflict reconcile finds here is the same thing "When the work contradicts an accepted record" below
+describes — stop, surface both sides, let the person decide. Nothing with a live conflict is written
+first and reconciled after.
+
 ## Writing
 
 If the level does not exist yet:
@@ -353,3 +391,161 @@ Recommendation: B, if the placement was deliberate; otherwise A.
 **Never resolve it alone, and never quietly write a record that supersedes one a person ratified.**
 Arriving with *"this conflicts, what do I do?"* hands the whole problem back. Arriving with both sides
 and their reasons lets them decide in one step.
+
+## Defining something specific
+
+Everything above is about work that already happened. This section is the other situation: someone
+asks you to **define** or **record** something specific — before any code settles it — or asks you to
+resolve a gap an `openrecord run` left open. The *why* is not yours here. It belongs to the person, or
+to whatever raised the gap, and the record it produces is only ever written after they say yes.
+
+### The why is never yours to invent
+
+If the person names *what* they want recorded but not *why*, ask. Never read a reason off the code, off
+a convention, off what seems likely — that is exactly the invented-why "Never invent a why" above warns
+against, and it is just as damaging here. A gap already carries its own evidence (see "Resolving a gap,
+by kind" below), which is often enough to ask a sharp question instead of a blank "why?".
+
+### No specific thing named → list open gaps
+
+If the person says only "let's define what's missing" or "let's resolve what's pending" and names
+nothing, do not guess. List what is actually open:
+
+```
+openrecord run gaps
+```
+
+This is the one command for this — it reports every open gap across every run, each carrying which run
+it belongs to, so you never have to know `.openrecord/runs/` exists at all. **Never read, list, or
+`cat` anything under `.openrecord/runs/` directly** — every look at a run's state goes through the
+binary (`run gaps`, `run status`, `run list`), the same way every write to it does.
+
+Let the person pick which gap to take on, unless there is exactly one.
+
+### Resolving a gap, by kind
+
+A gap's `--kind` says what is missing, and that is what decides how it gets resolved. In every case,
+resolving it is this last step:
+
+```
+openrecord run gap resolve <run> <gap> --record <path>
+```
+
+which requires `<path>` to already be an **existing, `accepted`** record — resolving is never the act
+that creates or accepts one, only the act that points the gap at one that already is.
+
+- **`missing`** — nobody has written this decision (or spec) down at all. Define a new record with the
+  person exactly the way the rest of this section describes (ask what's missing per the table below,
+  propose title and one line, write on their yes), then resolve the gap with the record you just wrote.
+- **`pending`** — the record already exists, but it is `pending`: someone else wrote it — `openrecord-
+  mine`, most often — and the person has never actually read it. This is the one place in this skill
+  where you **show the full body** before asking anything: open the record and show its `## Context`,
+  decision, and alternatives in full, then ask whether to accept it, change it, or discard it.
+  - **Accept**: `openrecord record edit <path> --status accepted`, then resolve the gap with that path.
+  - **Change**: edit the section that needs to change with the person first (`record edit --section ...
+    --body-file ...`), then accept and resolve the same way.
+  - **Discard**: the record stays as it is — do not accept it — and the gap is not resolved with it;
+    treat the question as if it were `missing` instead, and define a new record with the person.
+- **`contradicts`** — an existing record says something incompatible with what the gap's evidence
+  found. Show both sides, the same pairing `openrecord-reconcile` uses and the STOPPED block above
+  uses: what the existing record settles, what the new evidence requires, and why both cannot hold. The
+  person decides which one is right. Edit whichever record should change (the surviving one's `##
+  Alternatives` is where the losing reasoning goes, per `openrecord-reconcile`'s own resolution rule),
+  then resolve the gap with the record that holds.
+
+**What resolving actually does, so you report it accurately**: it moves the gap to `resolved`, records
+which accepted record resolved it, and moves every task it blocked back to `pending` **in the same
+run** — unless another still-open gap also blocks that task, in which case it stays blocked. It does
+**not** write anything to `.openrecord/compliance/` — that only happens once a task is actually finished
+(`run task done`), not when the question blocking it is answered.
+
+**Never resolve a gap on your own read of its evidence.** The evidence is what makes a gap specific
+enough to ask about; it is never a substitute for the person actually deciding.
+
+### What to ask for, by kind
+
+| Defining | Ask the person for |
+| --- | --- |
+| An actor | Which kind (`human`, `external-system`, `time`) and a description of what it is, in their own words — never invent the id or the kind from a guess. |
+| A single decision | The context (what forced a choice), the decision itself, the alternative(s) considered and why they lost, the consequences, and — per "What spec this decision serves" above — whether it exists because of a spec already on the books. |
+| A new spec | Its purpose, the main flow or rule in GIVEN/WHEN/THEN terms, which components it reaches (`--components`), and, for a `flow` or `process`, which actor initiates it. |
+| A new component | The path it owns, a title, and a description of when a reader should descend into it — see "Component add mechanics" below. |
+| A gap an `openrecord run` left open | Which gap, found through `openrecord run gaps` — then follow "Resolving a gap, by kind" above. |
+| How something existing is verified | A check (`on-change`/`pre-merge`, only if they already name the concrete tool), a sandbox (an environment to bring up and observe), or a `VERIFIED-IN` line (`pre-release`/`production`/`manual`) — exactly the rules "Write it so a check could fail" above already gives; never pick the tool yourself. |
+
+### Coherence before proposing anything
+
+Before you propose a single line — not only before you write — run the same coherence steps situation
+1 runs before writing: the neighbourhood (`openrecord grep`/`openrecord map` for what is already filed
+nearby, `openrecord impact`/`impact --files` for what governs the same ground), the origin (which spec,
+if any, this decision serves), the dependents or `served_by` a write/edit reply will report, the
+verification catalogue (`openrecord verification <key>`), and — see "## Reconcile the draft before
+writing" above — reconcile the draft before it is ever shown to the person, not only before it is
+written.
+
+**What this deliberately does not check: whether the code already complies.** No audit, no `check run`
+run against existing code to see if it already does this. A newly defined record is simply `unknown` in
+compliance the moment it is written; whether the code already satisfies it, or needs changing to, is
+later work — a run's own job, not this skill's.
+
+**A conflict changes what happens next, and it is not the same as situation 1's STOPPED block.** There,
+work already shipped and the conflict stops only the part of it that depends on the conflict. Here,
+nothing has been built yet: show both sides — what the existing record settles, what the new ask would
+require, why both cannot hold — and stop. Nothing is proposed, let alone written, until the person
+decides. If they confirm the new one instead, follow through exactly like a `contradicts` gap above:
+edit the record that should change, write the one that holds.
+
+### Propose title and one line — never the body
+
+Once the coherence steps above raise nothing that needs a person's decision, propose **one line per
+record**: its title, and its one-line description — exactly the thing the "description" of a written
+record already has to carry, never the drafted body, never the full frontmatter. The person has not
+read any of this yet; showing them a whole record to approve is the `pending`-gap exception above, not
+the default here.
+
+```
+Proposed:
+- decision  decisions/api/uploads/presigned-url.md
+            "Uploads go directly to S3 via a presigned URL; the API never receives the file body."
+```
+
+**A recap of the body is the body.** Do not follow the proposal with "the record will contain…" and
+its sections, however condensed — Context, Decision, Alternatives, Consequences restated as bullets is
+exactly the read this step exists to spare them. What you may add after the proposal is only what you
+**left out** and why (*"you didn't say how long the URL lasts, so it isn't in"*), because that is
+something they did not say, not something they already did.
+
+**Their yes writes it directly as `accepted`, and counts as read** — nothing waits at `pending` for a
+second look: the body was built from what they said in this conversation, so confirming the one line
+*is* the read-back. Nothing is written before that yes, for any record this
+section produces.
+
+**The same rule applies to every registry write this situation makes** — `actor add`, `component add`,
+`check add`, `sandbox add`: propose what it would declare in one line, write it only once the person
+says yes. Never pick an id, a kind, a command, or a sandbox's setup yourself; those come from what the
+person told you to ask for, per the table above.
+
+### Component add mechanics
+
+`openrecord-capture` otherwise never needs this, because finishing work rarely invents a new surface —
+but defining something specific sometimes does. The mechanics are `openrecord-onboard`'s own, used the
+same way:
+
+```
+openrecord component add <id> \
+  --path <the directory it owns> \
+  --title "<Title>" \
+  --description "<when a reader should descend here>"
+```
+
+`--title` and `--description` are both required, and both are the person's words, not yours to invent —
+the same rule the table above already states. Ask what the project's surfaces are called before naming
+one; do not propose a name they have not used.
+
+### Write it, then report
+
+Once a record is confirmed, write it exactly the way "## Writing" above describes — `record write` with
+`--status accepted` (never `pending`; the person's yes already settled it), `--serves`/`--depends-on`
+on a decision, `--components`/`--initiated-by` on a spec — and read `dependents`/`served_by` from the
+reply the same way. Report what was written per record, the same shape "Report what you wrote" above
+uses, plus, when the record resolved a gap, which gap and which run.

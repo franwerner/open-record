@@ -57,7 +57,7 @@ judgement:
 | Skill | Fires when |
 | --- | --- |
 | `openrecord-consult` | Before writing or changing code. Find what governs it first. |
-| `openrecord-capture` | Work finished. Decide what the store should say — usually nothing. |
+| `openrecord-capture` | Work finished, or someone wants to define something specific. Decide what the store should say (usually nothing, after work) or interview for it and write on their yes. |
 | `openrecord-audit` | A record is suspected stale, or you're about to lean on one heavily. Check it against the code, claim by claim. |
 | `openrecord-reconcile` | A record was just written or edited. Check it against the other records it could contradict. |
 | `openrecord-onboard` | An empty store. Fill it by asking the user, never by inferring. |
